@@ -1,5 +1,5 @@
 import pytest
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pydantic import ValidationError
 from uuid import UUID
@@ -7,7 +7,7 @@ from app.schemas import (
     UserCreate, UserUpdate, RoleCreate, RoleUpdate,
     ClientCreate, ClientUpdate,
     FinancialTransactionCreate, FinancialTransactionUpdate,
-    InvoiceCreate, InvoiceUpdate
+    InvoiceCreate, InvoiceUpdate, LoginRequest, LoginResponse, AuditLog, AuditLogCreate
 )
 
 class TestUserSchemas:
@@ -117,3 +117,98 @@ class TestFinancialSchemas:
                 amount_due=Decimal("-100.00"),  # Negative amount should fail
                 status="pending"
             )
+
+class TestAuditLogSchemas:
+    def test_audit_log_create_validation(self):
+        """Test audit log creation data validation"""
+        valid_data = {
+            "changed_by": "550e8400-e29b-41d4-a716-446655440000",
+            "table_name": "users",
+            "record_id": "550e8400-e29b-41d4-a716-446655440001",
+            "change_type": "UPDATE",
+            "change_details": "Updated email field from old@example.com to new@example.com"
+        }
+        audit_log = AuditLogCreate(**valid_data)
+        assert isinstance(audit_log.changed_by, UUID)
+        assert audit_log.table_name == "users"
+        assert isinstance(audit_log.record_id, UUID)
+        assert audit_log.change_type == "UPDATE"
+        assert audit_log.change_details == "Updated email field from old@example.com to new@example.com"
+
+    def test_audit_log_validation_errors(self):
+        """Test audit log validation errors"""
+        invalid_cases = [
+            (
+                {
+                    "changed_by": "550e8400-e29b-41d4-a716-446655440000",
+                    "table_name": "x" * 51,  # Exceeds max_length of 50
+                    "record_id": "550e8400-e29b-41d4-a716-446655440001",
+                    "change_type": "UPDATE",
+                    "change_details": "Test details"
+                },
+                "table_name too long"
+            ),
+            (
+                {
+                    "changed_by": "550e8400-e29b-41d4-a716-446655440000",
+                    "table_name": "users",
+                    "record_id": "550e8400-e29b-41d4-a716-446655440001",
+                    "change_type": "x" * 21,  # Exceeds max_length of 20
+                    "change_details": "Test details"
+                },
+                "change_type too long"
+            ),
+            (
+                {
+                    "changed_by": "invalid-uuid",  # Invalid UUID format
+                    "table_name": "users",
+                    "record_id": "550e8400-e29b-41d4-a716-446655440001",
+                    "change_type": "UPDATE",
+                    "change_details": "Test details"
+                },
+                "invalid UUID format"
+            )
+        ]
+        
+        for invalid_data, error_context in invalid_cases:
+            with pytest.raises(ValidationError):
+                AuditLogCreate(**invalid_data)
+
+    def test_audit_log_full_model(self):
+        """Test full AuditLog model with timestamp and ID"""
+        valid_data = {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "changed_by": "550e8400-e29b-41d4-a716-446655440001",
+            "table_name": "users",
+            "record_id": "550e8400-e29b-41d4-a716-446655440002",
+            "change_type": "INSERT",
+            "change_details": "Created new user record",
+            "timestamp": datetime.now()
+        }
+        audit_log = AuditLog(**valid_data)
+        assert isinstance(audit_log.id, UUID)
+        assert isinstance(audit_log.changed_by, UUID)
+        assert isinstance(audit_log.timestamp, datetime)
+        assert audit_log.table_name == "users"
+        assert audit_log.change_type == "INSERT"
+        assert audit_log.change_details == "Created new user record"
+
+class TestAuthSchemas:
+    def test_login_request_schema(self):
+        """Test login request schema validation"""
+        valid_data = {
+            "username": "test_username",
+            "password": "test_password"
+        }
+        login_request = LoginRequest(**valid_data)
+        assert login_request.username == "test_username"
+        assert login_request.password == "test_password"
+
+    def test_login_response_schema(self):
+        """Test login response schema validation"""
+        valid_data = {
+            "access_token": "test_access_token"
+        }
+        login_response = LoginResponse(**valid_data)
+        assert login_response.access_token == "test_access_token"
+        assert login_response.token_type == "bearer"
