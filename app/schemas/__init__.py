@@ -5,3 +5,4 @@ from .invoice_schema import Invoice, InvoiceCreate, InvoiceUpdate
 from .permission_schema import Permission, PermissionCreate, PermissionUpdate
 from .role_schema import Role, RoleCreate, RoleUpdate
 from .user_schema import User, UserCreate, UserUpdate
+from .auth_schema import LoginRequest, LoginResponse
