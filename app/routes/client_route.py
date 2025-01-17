@@ -1,12 +1,14 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
 from ..db import get_db
 from ..controllers.client_controller import ClientController
 from ..schemas.client_schema import Client, ClientCreate, ClientUpdate
 from ..dependencies.auth import get_current_user, check_permissions
 from ..models.user_model import User
+from ..controllers.report_controller import ReportController
 
 router = APIRouter()
 
@@ -26,6 +28,17 @@ async def create_client(
 ) -> Client:
     """
     Create a new client. Requires 'create' permission on 'clients' resource.
+    
+    Args:
+        client_data: Client data for creation
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        Client: Created client
+        
+    Raises:
+        HTTPException: If client creation fails or permission denied
     """
     client_controller = ClientController(db)
     return await client_controller.create_client(client_data, current_user)
@@ -45,23 +58,19 @@ async def get_client(
 ) -> Client:
     """
     Get a specific client by ID. Requires 'read' permission on 'clients' resource.
-    For client role, can only access own client information.
+    
+    Args:
+        client_id: UUID of client to retrieve
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        Client: Retrieved client
+        
+    Raises:
+        HTTPException: If client not found or access denied
     """
     client_controller = ClientController(db)
-    
-    # If user has client role, they can only access their own client information
-    if current_user.role.name == "client" and str(client_id) != getattr(current_user, "client_id", None):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "type": "about:blank",
-                "title": "Forbidden",
-                "status": 403,
-                "detail": "Access to this client is not allowed",
-                "instance": f"/clients/{client_id}"
-            }
-        )
-        
     return await client_controller.get_client(client_id, current_user)
 
 @router.get("",
@@ -80,20 +89,22 @@ async def get_clients(
 ) -> List[Client]:
     """
     Get all clients with pagination. Requires 'read' permission on 'clients' resource.
-    For client role, only returns their own client information.
+    
+    Args:
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        search: Optional search term for filtering
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        List[Client]: List of clients matching criteria
     """
     client_controller = ClientController(db)
     
     if search:
-        clients = await client_controller.search_clients(search)
-    else:
-        clients = await client_controller.get_all_clients(skip, limit)
-    
-    # If user has client role, filter to only show their own client
-    if current_user.role.name == "client":
-        clients = [c for c in clients if str(c.id) == getattr(current_user, "client_id", None)]
-    
-    return clients
+        return await client_controller.search_clients(search, current_user)
+    return await client_controller.get_all_clients(skip, limit, current_user)
 
 @router.put("/{client_id}",
            response_model=Client,
@@ -112,6 +123,18 @@ async def update_client(
 ) -> Client:
     """
     Update a client. Requires 'update' permission on 'clients' resource.
+    
+    Args:
+        client_id: UUID of client to update
+        client_data: Updated client data
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        Client: Updated client
+        
+    Raises:
+        HTTPException: If client not found or update fails
     """
     client_controller = ClientController(db)
     return await client_controller.update_client(client_id, client_data, current_user)
@@ -131,32 +154,56 @@ async def delete_client(
 ):
     """
     Delete a client. Requires 'delete' permission on 'clients' resource.
-    Only admin role can delete clients.
-    """
-    # Additional check for admin role
-    if current_user.role.name != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "type": "about:blank",
-                "title": "Forbidden",
-                "status": 403,
-                "detail": "Only administrators can delete clients",
-                "instance": f"/clients/{client_id}"
-            }
-        )
     
+    Args:
+        client_id: UUID of client to delete
+        current_user: Current authenticated user
+        db: Database session
+        
+    Raises:
+        HTTPException: If client not found or deletion fails
+    """
     client_controller = ClientController(db)
     result = await client_controller.delete_client(client_id, current_user)
     
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "type": "about:blank",
-                "title": "Not Found",
-                "status": 404,
-                "detail": f"Client with id '{client_id}' not found",
-                "instance": f"/clients/{client_id}"
-            }
-        )
+    # If client was deleted successfully, return 204 No Content
+    # If deletion failed, controller would have raised appropriate HTTPException
+    return None
+
+@router.get("/{client_id}/report",
+           dependencies=[Depends(check_permissions("clients", "read"))],
+           responses={
+               401: {"description": "Not authenticated"},
+               403: {"description": "Not enough permissions"},
+               404: {"description": "Client not found"}
+           },
+           response_class=StreamingResponse)
+async def get_client_report(
+    client_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a PDF report of client's financial history. Requires 'read' permission.
+    
+    Args:
+        client_id: UUID of client
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        StreamingResponse: PDF report as streaming response
+        
+    Raises:
+        HTTPException: If client not found or access denied
+    """
+    report_controller = ReportController(db)
+    pdf_buffer = await report_controller.generate_client_financial_report(client_id, current_user)
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="client_financial_report.pdf"'
+        }
+    )
