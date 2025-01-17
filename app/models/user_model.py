@@ -13,8 +13,9 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role_id = Column(UUID, ForeignKey("roles.id"))
-    role = relationship("Role")
+    client_id = Column(UUID, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     role = relationship('Role', back_populates='users')
+    client = relationship('Client', back_populates='users', single_parent=True)

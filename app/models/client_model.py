@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, UUID, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..db import Base
 import uuid
@@ -15,3 +16,5 @@ class Client(Base):
     address = Column(Text)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    users = relationship('User', back_populates='client', cascade="all, delete-orphan")
