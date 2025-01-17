@@ -1,5 +1,7 @@
 # PwC-Challenge: Financial Management System
-
+#### Note:
+- For security reasons, the .env file is not published in this public repository. If needed, please contact me and I'll send it to you.
+  
 ## Overview
 
 This Financial Management System is a robust, role-based API designed to streamline financial operations for businesses. Built with FastAPI and SQLAlchemy, the system provides comprehensive features for managing clients, financial transactions, and invoices with strong security and access control.
