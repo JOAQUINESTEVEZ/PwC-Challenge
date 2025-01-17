@@ -21,11 +21,12 @@ This Financial Management System is a robust, role-based API designed to streaml
 
 - **Backend**: FastAPI
 - **ORM**: SQLAlchemy
-- **Database**: PostgreSQL
+- **Database**: Supabase
 - **Authentication**: JWT
 - **Testing**: Pytest
 - **PDF Generation**: ReportLab
 - **Database Migration**: Alembic
+- **Deployment**: Render
 
 ## Development Approach
 
