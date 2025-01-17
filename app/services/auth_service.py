@@ -81,7 +81,6 @@ class AuthService:
             )
 
         try:
-            # Start transaction
             # Create client record
             client = Client(
                 id=uuid.uuid4(),
