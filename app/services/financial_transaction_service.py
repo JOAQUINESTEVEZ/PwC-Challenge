@@ -1,109 +1,113 @@
 from typing import List, Optional
 from uuid import UUID
-from datetime import date
-from fastapi import HTTPException, status
+from datetime import date, datetime, UTC
 from sqlalchemy.orm import Session
 from ..models.financial_transaction_model import FinancialTransaction
 from ..models.user_model import User
 from ..repositories.financial_transaction_repository import FinancialTransactionRepository
 from ..schemas.financial_transaction_schema import FinancialTransactionCreate, FinancialTransactionUpdate
 from ..models.audit_logs_model import AuditLog
+from decimal import Decimal
 
 class FinancialTransactionService:
-    """Service for handling financial transaction business logic.
-
-    This service implements the business logic for financial transactions,
-    including creation, retrieval, updates, and deletions. It handles
-    permissions, validations, and audit logging.
-
-    Attributes:
-        transaction_repository (FinancialTransactionRepository): Repository for database operations
-        db (Session): Database session
+    """
+    Service for handling financial transaction business logic.
+    Manages transaction operations and business rules.
     """
     
     def __init__(self, db: Session):
-        """Initialize service with database session.
-
+        """
+        Initialize service with database session.
+        
         Args:
-            db (Session): SQLAlchemy database session
+            db: Database session
         """
         self.transaction_repository = FinancialTransactionRepository(FinancialTransaction, db)
         self.db = db
 
-    def create_transaction(self, 
-                       transaction_data: FinancialTransactionCreate, 
-                       current_user: User) -> FinancialTransaction:
-        """Create a new financial transaction.
-
+    def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
+        """
+        Create an audit log entry for transaction changes.
+        
         Args:
-            transaction_data (FinancialTransactionCreate): Transaction data to create
-            current_user (User): Currently authenticated user
+            user_id: ID of user making the change
+            record_id: ID of affected transaction
+            change_type: Type of change (create, update, delete)
+            details: Change details
+        """
+        audit_log = AuditLog(
+            changed_by=user_id,
+            table_name="financial_transactions",
+            record_id=record_id,
+            change_type=change_type,
+            change_details=details,
+            timestamp=datetime.now(UTC)
+        )
+        self.db.add(audit_log)
+        self.db.commit()
 
+    def _validate_transaction_amount(self, amount: Decimal) -> None:
+        """
+        Validate transaction amount.
+        
+        Args:
+            amount: Transaction amount to validate
+            
+        Raises:
+            ValueError: If amount is invalid
+        """
+        if amount <= Decimal('0'):
+            raise ValueError("Transaction amount must be positive")
+
+    def create_transaction(self, transaction_data: FinancialTransactionCreate, current_user: User) -> FinancialTransaction:
+        """
+        Create a new financial transaction.
+        
+        Args:
+            transaction_data: Data for transaction creation
+            current_user: User creating the transaction
+            
         Returns:
             FinancialTransaction: Created transaction
-
+            
         Raises:
-            HTTPException: If validation fails or insufficient permissions
+            ValueError: If validation fails
         """
-        # Convert Pydantic model to dict and add created_by
+        # Validate amount
+        self._validate_transaction_amount(transaction_data.amount)
+        
+        # Create transaction
         transaction_dict = transaction_data.model_dump()
         transaction_dict["created_by"] = current_user.id
         
         transaction = self.transaction_repository.create(transaction_dict)
         
         # Create audit log
-        audit_log = AuditLog(
-            changed_by=current_user.id,
-            table_name="financial_transactions",
+        self._create_audit_log(
+            user_id=current_user.id,
             record_id=transaction.id,
             change_type="create",
-            change_details=f"Created financial transaction of {transaction.amount} for client {transaction.client_id}"
+            details=f"Created transaction of {transaction.amount} for client {transaction.client_id}"
         )
-        self.db.add(audit_log)
-        self.db.commit()
         
         return transaction
 
-    def get_transaction(self, 
-                     transaction_id: UUID, 
-                     current_user: User) -> FinancialTransaction:
-        """Retrieve a transaction by ID.
-
+    def get_transaction(self, transaction_id: UUID) -> FinancialTransaction:
+        """
+        Get transaction by ID.
+        
         Args:
-            transaction_id (UUID): Transaction ID to retrieve
-            current_user (User): Currently authenticated user
-
+            transaction_id: UUID of transaction to retrieve
+            
         Returns:
-            FinancialTransaction: Retrieved transaction
-
+            FinancialTransaction: Found transaction
+            
         Raises:
-            HTTPException: If transaction not found or insufficient permissions
+            ValueError: If transaction not found
         """
         transaction = self.transaction_repository.get(transaction_id)
         if not transaction:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "type": "about:blank",
-                    "title": "Transaction not found",
-                    "status": 404,
-                    "detail": f"Transaction with id '{transaction_id}' not found",
-                    "instance": f"/finance/transactions/{transaction_id}"
-                }
-            )
-        
-        # If user is a client, they can only view their own transactions
-        if current_user.role.name == "client" and transaction.client_id != current_user.client_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "type": "about:blank",
-                    "title": "Access denied",
-                    "status": 403,
-                    "detail": "You can only view your own transactions",
-                    "instance": f"/finance/transactions/{transaction_id}"
-                }
-            )
+            raise ValueError(f"Transaction with id '{transaction_id}' not found")
             
         return transaction
 
@@ -113,25 +117,27 @@ class FinancialTransactionService:
                         start_date: Optional[date] = None,
                         end_date: Optional[date] = None,
                         min_amount: Optional[float] = None,
-                        max_amount: Optional[float] = None,
-                        current_user: User = None) -> List[FinancialTransaction]:
-        """Search transactions with various filters.
-
+                        max_amount: Optional[float] = None) -> List[FinancialTransaction]:
+        """
+        Search transactions with filters.
+        
         Args:
-            client_id (Optional[UUID], optional): Filter by client. Defaults to None.
-            category (Optional[str], optional): Filter by category. Defaults to None.
-            start_date (Optional[date], optional): Start date range. Defaults to None.
-            end_date (Optional[date], optional): End date range. Defaults to None.
-            min_amount (Optional[float], optional): Minimum amount. Defaults to None.
-            max_amount (Optional[float], optional): Maximum amount. Defaults to None.
-            current_user (User, optional): Currently authenticated user. Defaults to None.
-
+            client_id: Optional client filter
+            category: Optional category filter
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+            min_amount: Optional minimum amount filter
+            max_amount: Optional maximum amount filter
+            
         Returns:
             List[FinancialTransaction]: List of matching transactions
+            
+        Raises:
+            ValueError: If date range is invalid
         """
-        # If user is a client, force client_id filter to their own id
-        if current_user.role.name == "client":
-            client_id = current_user.client_id
+        # Validate date range
+        if start_date and end_date and end_date < start_date:
+            raise ValueError("End date cannot be before start date")
             
         return self.transaction_repository.search_transactions(
             client_id=client_id,
@@ -146,67 +152,62 @@ class FinancialTransactionService:
                        transaction_id: UUID, 
                        transaction_data: FinancialTransactionUpdate,
                        current_user: User) -> FinancialTransaction:
-        """Update an existing transaction.
-
+        """
+        Update an existing transaction.
+        
         Args:
-            transaction_id (UUID): Transaction ID to update
-            transaction_data (FinancialTransactionUpdate): Updated transaction data
-            current_user (User): Currently authenticated user
-
+            transaction_id: UUID of transaction to update
+            transaction_data: Updated transaction data
+            current_user: User performing the update
+            
         Returns:
             FinancialTransaction: Updated transaction
-
+            
         Raises:
-            HTTPException: If transaction not found or insufficient permissions
+            ValueError: If transaction not found or validation fails
         """
         # Check if transaction exists
-        transaction = self.get_transaction(transaction_id, current_user)
+        transaction = self.get_transaction(transaction_id)
+        
+        # Validate amount if provided
+        if transaction_data.amount is not None:
+            self._validate_transaction_amount(transaction_data.amount)
         
         updated_transaction = self.transaction_repository.update(transaction_id, transaction_data)
         
         # Create audit log
-        audit_log = AuditLog(
-            changed_by=current_user.id,
-            table_name="financial_transactions",
+        self._create_audit_log(
+            user_id=current_user.id,
             record_id=transaction_id,
             change_type="update",
-            change_details=f"Updated financial transaction {transaction_id}"
+            details=f"Updated transaction {transaction_id}"
         )
-        self.db.add(audit_log)
-        self.db.commit()
         
         return updated_transaction
 
-    def delete_transaction(self, 
-                       transaction_id: UUID,
-                       current_user: User) -> bool:
-        """Delete a transaction.
-
-        Args:
-            transaction_id (UUID): Transaction ID to delete
-            current_user (User): Currently authenticated user
-
-        Returns:
-            bool: True if successful, False otherwise
-
-        Raises:
-            HTTPException: If transaction not found or insufficient permissions
+    def delete_transaction(self, transaction_id: UUID, current_user: User) -> bool:
         """
-        # Check if transaction exists
-        transaction = self.get_transaction(transaction_id, current_user)
+        Delete a transaction.
+        
+        Args:
+            transaction_id: UUID of transaction to delete
+            current_user: User performing the deletion
+            
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        # Verify transaction exists
+        transaction = self.get_transaction(transaction_id)
         
         result = self.transaction_repository.delete(transaction_id)
         
         if result:
             # Create audit log
-            audit_log = AuditLog(
-                changed_by=current_user.id,
-                table_name="financial_transactions",
+            self._create_audit_log(
+                user_id=current_user.id,
                 record_id=transaction_id,
                 change_type="delete",
-                change_details=f"Deleted financial transaction {transaction_id}"
+                details=f"Deleted transaction {transaction_id}"
             )
-            self.db.add(audit_log)
-            self.db.commit()
             
         return result

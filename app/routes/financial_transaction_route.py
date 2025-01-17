@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import date
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..controllers.financial_transaction_controller import FinancialTransactionController
@@ -22,14 +22,28 @@ router = APIRouter()
             responses={
                 401: {"description": "Not authenticated"},
                 403: {"description": "Not enough permissions"},
-                404: {"description": "Client not found"}
+                404: {"description": "Client not found"},
+                400: {"description": "Invalid transaction data"}
             })
 async def create_transaction(
     transaction_data: FinancialTransactionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> FinancialTransaction:
-    """Create a new financial transaction."""
+    """
+    Create a new financial transaction.
+
+    Args:
+        transaction_data: Data for the new transaction
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        FinancialTransaction: Created transaction
+
+    Raises:
+        HTTPException: If creation fails or permissions not met
+    """
     controller = FinancialTransactionController(db)
     return await controller.create_transaction(transaction_data, current_user)
 
@@ -46,7 +60,20 @@ async def get_transaction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> FinancialTransaction:
-    """Get a specific financial transaction by ID."""
+    """
+    Get a specific financial transaction by ID.
+
+    Args:
+        transaction_id: UUID of transaction to retrieve
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        FinancialTransaction: Retrieved transaction
+
+    Raises:
+        HTTPException: If transaction not found or access denied
+    """
     controller = FinancialTransactionController(db)
     return await controller.get_transaction(transaction_id, current_user)
 
@@ -67,7 +94,22 @@ async def search_transactions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> List[FinancialTransaction]:
-    """Search and filter financial transactions."""
+    """
+    Search and filter financial transactions.
+
+    Args:
+        client_id: Optional client ID filter
+        category: Optional category filter
+        start_date: Optional start date filter
+        end_date: Optional end date filter
+        min_amount: Optional minimum amount filter
+        max_amount: Optional maximum amount filter
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        List[FinancialTransaction]: List of matching transactions
+    """
     controller = FinancialTransactionController(db)
     return await controller.search_transactions(
         client_id=client_id,
@@ -85,7 +127,8 @@ async def search_transactions(
            responses={
                401: {"description": "Not authenticated"},
                403: {"description": "Not enough permissions"},
-               404: {"description": "Transaction not found"}
+               404: {"description": "Transaction not found"},
+               400: {"description": "Invalid update data"}
            })
 async def update_transaction(
     transaction_id: UUID,
@@ -93,7 +136,21 @@ async def update_transaction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> FinancialTransaction:
-    """Update an existing financial transaction."""
+    """
+    Update an existing financial transaction.
+
+    Args:
+        transaction_id: UUID of transaction to update
+        transaction_data: Updated transaction data
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        FinancialTransaction: Updated transaction
+
+    Raises:
+        HTTPException: If transaction not found or update fails
+    """
     controller = FinancialTransactionController(db)
     return await controller.update_transaction(transaction_id, transaction_data, current_user)
 
@@ -110,18 +167,17 @@ async def delete_transaction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a financial transaction."""
+    """
+    Delete a financial transaction.
+
+    Args:
+        transaction_id: UUID of transaction to delete
+        current_user: Current authenticated user
+        db: Database session
+
+    Raises:
+        HTTPException: If transaction not found or deletion fails
+    """
     controller = FinancialTransactionController(db)
-    result = await controller.delete_transaction(transaction_id, current_user)
-    
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "type": "about:blank",
-                "title": "Transaction not found",
-                "status": 404,
-                "detail": f"Transaction with id '{transaction_id}' not found",
-                "instance": f"/finance/transactions/{transaction_id}"
-            }
-        )
+    await controller.delete_transaction(transaction_id, current_user)
+    return None
