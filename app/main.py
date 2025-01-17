@@ -4,7 +4,7 @@ from app.db import engine
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from app.config import settings
-from app.routes import auth_route, client_route, financial_transaction_route
+from app.routes import auth_route, client_route, financial_transaction_route, invoice_route
 
 # Initialize the FastAPI app
 app = FastAPI()
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth_route.router, prefix="/auth", tags=["Authentication"])
 app.include_router(client_route.router, prefix="/clients", tags=["Clients"])
 app.include_router(financial_transaction_route.router,prefix="/finance/transactions",tags=["Finance"])
+app.include_router(invoice_route.router, prefix="/invoices", tags=["Invoices"])
 
 # Healthcheck and version endpoints
 @app.get("/healthcheck", tags=["Healthcheck"])
