@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from ..services.auth_service import AuthService
 from ..schemas.auth_schema import LoginResponse
+from ..schemas.signup_schema import SignupRequest
 from ..dependencies.auth import get_current_user
 
 class AuthController:
@@ -52,6 +53,10 @@ class AuthController:
             )
         
         return result
+    
+    async def signup(self, signup_data: SignupRequest) -> LoginResponse:
+        """Handle client signup process."""
+        return self.auth_service.signup_client(signup_data)
 
     async def get_current_user_info(self, current_user: dict) -> Dict[str, Any]:
         """

@@ -6,6 +6,7 @@ from typing import Dict, Any
 from ..db import get_db
 from ..controllers.auth_controller import AuthController
 from ..schemas.auth_schema import LoginResponse
+from ..schemas.signup_schema import SignupRequest
 from ..dependencies.auth import get_current_user
 
 router = APIRouter()
@@ -45,6 +46,36 @@ async def login(
     """
     auth_controller = AuthController(db)
     return await auth_controller.login(form_data)
+
+@router.post("/signup",
+            response_model=LoginResponse,
+            status_code=status.HTTP_201_CREATED,
+            responses={
+                400: {
+                    "description": "Registration failed",
+                    "content": {
+                        "application/json": {
+                            "example": {
+                                "type": "about:blank",
+                                "title": "Registration failed",
+                                "status": 400,
+                                "detail": "Username already exists",
+                                "instance": "/auth/signup"
+                            }
+                        }
+                    }
+                }
+            })
+async def signup(
+    signup_data: SignupRequest,
+    db: Session = Depends(get_db)
+) -> LoginResponse:
+    """
+    Register a new client user and create corresponding client record.
+    Returns an access token upon successful registration.
+    """
+    auth_controller = AuthController(db)
+    return await auth_controller.signup(signup_data)
 
 @router.get("/me",
             response_model=Dict[str, Any],
