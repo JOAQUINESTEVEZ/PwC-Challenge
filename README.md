@@ -1,5 +1,5 @@
 # PwC-Challenge: Financial Management System
-#### Note:
+#### Notes:
 - For security reasons, the .env file is not published in this public repository. If needed, please contact me and I'll send it to you.
 - Solution Hosted in Render: https://pwc-challenge.onrender.com/docs
 - For experimenting with the API, go to 'sample_data' folder to use sample data and accounts.
