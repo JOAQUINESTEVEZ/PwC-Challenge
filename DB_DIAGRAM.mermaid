@@ -1,0 +1,82 @@
+erDiagram
+    financial_transactions {
+        uuid id
+        uuid client_id
+        uuid created_by
+        date transaction_date
+        numeric amount
+        varchar description
+        varchar category
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    clients {
+        uuid id
+        varchar name
+        varchar industry
+        varchar contact_email
+        varchar contact_phone
+        text address
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    users {
+        uuid id
+        varchar username
+        varchar email
+        varchar password_hash
+        uuid role_id
+        uuid client_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    audit_logs {
+        uuid id
+        uuid changed_by
+        varchar table_name
+        uuid record_id
+        varchar change_type
+        varchar change_details
+        timestamp timestamp
+    }
+    
+    invoices {
+        uuid id
+        uuid client_id
+        uuid created_by
+        date invoice_date
+        date due_date
+        numeric amount_due
+        numeric amount_paid
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    permissions {
+        uuid id
+        uuid role_id
+        varchar resource
+        varchar action
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    roles {
+        uuid id
+        varchar name
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    clients ||--o{ users : has
+    users }o--|| roles : has
+    permissions }o--|| roles : has
+    financial_transactions }o--|| clients : belongs_to
+    financial_transactions }o--|| users : created_by
+    invoices }o--|| clients : belongs_to
+    invoices }o--|| users : created_by
+    audit_logs }o--|| users : changed_by

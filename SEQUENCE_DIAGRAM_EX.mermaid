@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant Client
+    participant Admin
+    participant Finance
+    participant Auditor
+    participant FMS
+
+    Client->>FMS: Create new transaction
+    FMS->>FMS: Validate transaction data
+    FMS->>FMS: Store transaction in database
+    FMS->>FMS: Generate audit log
+    FMS->>Client: Transaction created successfully
+
+    Admin->>FMS: Generate financial report
+    FMS->>FMS: Fetch client transactions and invoices
+    FMS->>FMS: Generate PDF report
+    FMS->>Admin: Deliver financial report
+
+    Finance->>FMS: Create new invoice
+    FMS->>FMS: Validate invoice data
+    FMS->>FMS: Store invoice in database
+    FMS->>FMS: Generate audit log
+    FMS->>Finance: Invoice created successfully
+
+    Client->>FMS: View invoice details
+    FMS->>FMS: Retrieve invoice information
+    FMS->>Client: Provide invoice details
+
+    Client->>FMS: Make payment on invoice
+    FMS->>FMS: Validate payment amount
+    FMS->>FMS: Update invoice status and amount paid
+    FMS->>FMS: Generate audit log
+    FMS->>Client: Payment processed successfully
+
+    Auditor->>FMS: Generate financial report
+    FMS->>FMS: Fetch client transactions and invoices
+    FMS->>FMS: Generate PDF report
+    FMS->>Auditor: Deliver financial report
