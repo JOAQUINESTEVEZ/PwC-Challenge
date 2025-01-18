@@ -7,6 +7,7 @@ from ..db import get_db
 from ..controllers.client_controller import ClientController
 from ..schemas.client_schema import Client, ClientCreate, ClientUpdate
 from ..dependencies.auth import get_current_user, check_permissions
+from ..dependencies.rate_limit import check_user_pdf_rate_limit
 from ..models.user_model import User
 from ..controllers.report_controller import ReportController
 
@@ -171,11 +172,28 @@ async def delete_client(
     return None
 
 @router.get("/{client_id}/report",
-           dependencies=[Depends(check_permissions("clients", "read"))],
+           dependencies=[
+               Depends(check_permissions("clients", "read")),
+               Depends(check_user_pdf_rate_limit)
+            ],
            responses={
                401: {"description": "Not authenticated"},
                403: {"description": "Not enough permissions"},
-               404: {"description": "Client not found"}
+               404: {"description": "Client not found"},
+               429: {
+                   "description": "Too Many Requests",
+                   "content": {
+                       "application/json": {
+                           "example": {
+                               "type": "about:blank",
+                               "title": "Too Many Requests",
+                               "status": 429,
+                               "detail": "Rate limit exceeded. Please try again in X seconds.",
+                               "instance": "/clients/{client_id}/report"
+                           }
+                       }
+                   }
+               }
            },
            response_class=StreamingResponse)
 async def get_client_report(

@@ -7,6 +7,7 @@ from ..models.user_model import User
 from ..utils.jwt import verify_token
 from ..repositories.user_repository import UserRepository
 from ..services.permission_service import PermissionService
+from ..utils.rate_limiter import RateLimiter, RateLimitExceeded
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
