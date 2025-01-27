@@ -5,16 +5,18 @@ from sqlalchemy.orm import Session
 from fastapi.responses import StreamingResponse
 from ..db import get_db
 from ..controllers.client_controller import ClientController
-from ..schemas.client_schema import Client, ClientCreate, ClientUpdate
+from ..schemas.request.client import ClientCreate, ClientUpdate
+from ..schemas.response.client import ClientResponse
 from ..dependencies.auth import get_current_user, check_permissions
 from ..dependencies.rate_limit import check_user_pdf_rate_limit
-from ..models.user_model import User
+from ..entities.client import Client
+from ..entities.user import User
 from ..controllers.report_controller import ReportController
 
 router = APIRouter()
 
 @router.post("",
-            response_model=Client,
+            response_model=ClientResponse,
             status_code=status.HTTP_201_CREATED,
             dependencies=[Depends(check_permissions("clients", "create"))],
             responses={
@@ -26,17 +28,17 @@ async def create_client(
     client_data: ClientCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Client:
+) -> ClientResponse:
     """
     Create a new client. Requires 'create' permission on 'clients' resource.
     
     Args:
-        client_data: Client data for creation
+        client_data: ClientRequest data for creation
         current_user: Current authenticated user
         db: Database session
         
     Returns:
-        Client: Created client
+        ClientResponse: Created client
         
     Raises:
         HTTPException: If client creation fails or permission denied
@@ -45,7 +47,7 @@ async def create_client(
     return await client_controller.create_client(client_data, current_user)
 
 @router.get("/{client_id}",
-           response_model=Client,
+           response_model=ClientResponse,
            dependencies=[Depends(check_permissions("clients", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -56,7 +58,7 @@ async def get_client(
     client_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Client:
+) -> ClientResponse:
     """
     Get a specific client by ID. Requires 'read' permission on 'clients' resource.
     
@@ -66,7 +68,7 @@ async def get_client(
         db: Database session
         
     Returns:
-        Client: Retrieved client
+        ClientResponse: Retrieved client
         
     Raises:
         HTTPException: If client not found or access denied
@@ -75,7 +77,7 @@ async def get_client(
     return await client_controller.get_client(client_id, current_user)
 
 @router.get("",
-           response_model=List[Client],
+           response_model=List[ClientResponse],
            dependencies=[Depends(check_permissions("clients", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -87,7 +89,7 @@ async def get_clients(
     search: Optional[str] = Query(None, description="Search term for client name or industry"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[Client]:
+) -> List[ClientResponse]:
     """
     Get all clients with pagination. Requires 'read' permission on 'clients' resource.
     
@@ -99,7 +101,7 @@ async def get_clients(
         db: Database session
         
     Returns:
-        List[Client]: List of clients matching criteria
+        List[ClientResponse]: List of clients matching criteria
     """
     client_controller = ClientController(db)
     
@@ -108,7 +110,7 @@ async def get_clients(
     return await client_controller.get_all_clients(skip, limit, current_user)
 
 @router.put("/{client_id}",
-           response_model=Client,
+           response_model=ClientResponse,
            dependencies=[Depends(check_permissions("clients", "update"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -121,7 +123,7 @@ async def update_client(
     client_data: ClientUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Client:
+) -> ClientResponse:
     """
     Update a client. Requires 'update' permission on 'clients' resource.
     
@@ -132,7 +134,7 @@ async def update_client(
         db: Database session
         
     Returns:
-        Client: Updated client
+        ClientResponse: Updated client
         
     Raises:
         HTTPException: If client not found or update fails

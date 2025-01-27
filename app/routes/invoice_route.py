@@ -1,22 +1,19 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import date
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..controllers.invoice_controller import InvoiceController
-from ..schemas.invoice_schema import (
-    Invoice,
-    InvoiceCreate,
-    InvoiceUpdate
-)
+from ..schemas.request.invoice import InvoiceCreate, InvoiceUpdate
+from ..schemas.response.invoice import InvoiceResponse
 from ..dependencies.auth import get_current_user, check_permissions
-from ..models.user_model import User
+from ..entities.user import User
 
 router = APIRouter()
 
 @router.post("",
-            response_model=Invoice,
+            response_model=InvoiceResponse,
             status_code=status.HTTP_201_CREATED,
             dependencies=[Depends(check_permissions("invoices", "create"))],
             responses={
@@ -29,7 +26,7 @@ async def create_invoice(
     invoice_data: InvoiceCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Invoice:
+) -> InvoiceResponse:
     """
     Create a new invoice.
     
@@ -48,7 +45,7 @@ async def create_invoice(
     return await controller.create_invoice(invoice_data, current_user)
 
 @router.get("/overdue",
-           response_model=List[Invoice],
+           response_model=List[InvoiceResponse],
            dependencies=[Depends(check_permissions("invoices", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -57,7 +54,7 @@ async def create_invoice(
 async def get_overdue_invoices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[Invoice]:
+) -> List[InvoiceResponse]:
     """
     Get all overdue invoices.
     Clients can only view their own overdue invoices.
@@ -73,7 +70,7 @@ async def get_overdue_invoices(
     return await controller.get_overdue_invoices(current_user)
 
 @router.get("/{invoice_id}",
-           response_model=Invoice,
+           response_model=InvoiceResponse,
            dependencies=[Depends(check_permissions("invoices", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -84,7 +81,7 @@ async def get_invoice(
     invoice_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Invoice:
+) -> InvoiceResponse:
     """
     Get a specific invoice by ID.
     Clients can only view their own invoices.
@@ -104,7 +101,7 @@ async def get_invoice(
     return await controller.get_invoice(invoice_id, current_user)
 
 @router.get("",
-           response_model=List[Invoice],
+           response_model=List[InvoiceResponse],
            dependencies=[Depends(check_permissions("invoices", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -120,7 +117,7 @@ async def search_invoices(
     is_overdue: Optional[bool] = Query(None, description="Filter overdue invoices"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[Invoice]:
+) -> List[InvoiceResponse]:
     """
     Search and filter invoices.
     Clients can only view their own invoices.
@@ -152,7 +149,7 @@ async def search_invoices(
     )
 
 @router.put("/{invoice_id}",
-           response_model=Invoice,
+           response_model=InvoiceResponse,
            dependencies=[Depends(check_permissions("invoices", "update"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -165,7 +162,7 @@ async def update_invoice(
     invoice_data: InvoiceUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Invoice:
+) -> InvoiceResponse:
     """
     Update an existing invoice.
     Cannot increase amount_paid beyond amount_due.

@@ -30,8 +30,8 @@ async def get_current_user(
             }
         )
     
-    user_repository = UserRepository(User, db)
-    user = user_repository.get(user_id)
+    user_repository = UserRepository(db)
+    user = await user_repository.get_by_id(user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

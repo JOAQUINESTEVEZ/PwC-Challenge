@@ -5,8 +5,9 @@ from typing import Dict, Any
 
 from ..db import get_db
 from ..controllers.auth_controller import AuthController
-from ..schemas.auth_schema import LoginResponse
-from ..schemas.signup_schema import SignupRequest
+from ..schemas.request.login import LoginRequest
+from ..schemas.request.signup import SignupRequest
+from ..schemas.response.login import LoginResponse
 from ..dependencies.auth import get_current_user
 
 router = APIRouter()

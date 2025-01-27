@@ -4,12 +4,11 @@ from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from ..services.financial_transaction_service import FinancialTransactionService
-from ..models.user_model import User
-from ..schemas.financial_transaction_schema import (
-    FinancialTransaction,
-    FinancialTransactionCreate,
-    FinancialTransactionUpdate
-)
+from ..entities.user import User
+from ..entities.financial_transaction import FinancialTransaction
+from ..schemas.request.financial_transaction import FinancialTransactionCreate, FinancialTransactionUpdate
+from ..schemas.response.financial_transaction import FinancialTransactionResponse
+from ..schemas.dto.transaction_dto import TransactionDTO
 
 class FinancialTransactionController:
     """
@@ -26,7 +25,7 @@ class FinancialTransactionController:
         """
         self.transaction_service = FinancialTransactionService(db)
 
-    def _check_transaction_access(self, transaction: FinancialTransaction, current_user: User):
+    def _check_transaction_access(self, transaction: TransactionDTO, current_user: User):
         """
         Check if user has access to transaction.
         
@@ -51,24 +50,33 @@ class FinancialTransactionController:
 
     async def create_transaction(self, 
                              transaction_data: FinancialTransactionCreate,
-                             current_user: User) -> FinancialTransaction:
+                             current_user: User) -> FinancialTransactionResponse:
         """Create a new financial transaction."""
         try:
-            # For client role, ensure they can only create transactions for themselves
-            if current_user.role.name == "client":
-                if str(transaction_data.client_id) != str(current_user.client_id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "type": "about:blank",
-                            "title": "Access denied",
-                            "status": 403,
-                            "detail": "You can only create transactions for your own account",
-                            "instance": "/finance/transactions"
-                        }
-                    )
+            # Convert Request to DTO
+            transaction_dto = TransactionDTO(
+                id=None,
+                client_id=transaction_data.client_id,
+                transaction_date=transaction_data.transaction_date,
+                amount=transaction_data.amount,
+                category=transaction_data.category,
+                description=transaction_data.description,
+                created_by=current_user.id
+            )
             
-            return self.transaction_service.create_transaction(transaction_data, current_user)
+            # Send DTO to service, get DTO back
+            result_dto = await self.transaction_service.create_transaction(transaction_dto, current_user)
+            
+            # Convert DTO to Response
+            return FinancialTransactionResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                transaction_date=result_dto.transaction_date,
+                amount=result_dto.amount,
+                category=result_dto.category,
+                description=result_dto.description,
+                created_by=result_dto.created_by
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -83,12 +91,21 @@ class FinancialTransactionController:
 
     async def get_transaction(self,
                           transaction_id: UUID,
-                          current_user: User) -> FinancialTransaction:
+                          current_user: User) -> FinancialTransactionResponse:
         """Retrieve a single transaction by ID."""
         try:
-            transaction = self.transaction_service.get_transaction(transaction_id)
-            self._check_transaction_access(transaction, current_user)
-            return transaction
+            result_dto = await self.transaction_service.get_transaction(transaction_id)
+            self._check_transaction_access(result_dto, current_user)
+            
+            return FinancialTransactionResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                transaction_date=result_dto.transaction_date,
+                amount=result_dto.amount,
+                category=result_dto.category,
+                description=result_dto.description,
+                created_by=result_dto.created_by
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -108,14 +125,14 @@ class FinancialTransactionController:
                               end_date: Optional[date] = None,
                               min_amount: Optional[float] = None,
                               max_amount: Optional[float] = None,
-                              current_user: User = None) -> List[FinancialTransaction]:
+                              current_user: User = None) -> List[FinancialTransactionResponse]:
         """Search for transactions with various filters."""
         try:
             # For client role, force client_id filter to their own id
             if current_user.role.name == "client":
                 client_id = current_user.client_id
             
-            return self.transaction_service.search_transactions(
+            result_dtos = await self.transaction_service.search_transactions(
                 client_id=client_id,
                 category=category,
                 start_date=start_date,
@@ -123,6 +140,19 @@ class FinancialTransactionController:
                 min_amount=min_amount,
                 max_amount=max_amount
             )
+
+            # Convert DTOs to Responses
+            return [
+                FinancialTransactionResponse(
+                    id=result_dto.id,
+                    client_id=result_dto.client_id,
+                    transaction_date=result_dto.transaction_date,
+                    amount=result_dto.amount,
+                    category=result_dto.category,
+                    description=result_dto.description,
+                    created_by=result_dto.created_by
+                ) for result_dto in result_dtos
+            ]
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -138,17 +168,32 @@ class FinancialTransactionController:
     async def update_transaction(self,
                              transaction_id: UUID,
                              transaction_data: FinancialTransactionUpdate,
-                             current_user: User) -> FinancialTransaction:
+                             current_user: User) -> FinancialTransactionResponse:
         """Update an existing transaction."""
         try:
-            # First get the transaction to check access
-            transaction = self.transaction_service.get_transaction(transaction_id)
-            self._check_transaction_access(transaction, current_user)
-            
-            return self.transaction_service.update_transaction(
-                transaction_id,
-                transaction_data,
-                current_user
+            # Convert Request to DTO
+            update_dto = TransactionDTO(
+                id=transaction_id,
+                client_id=None, # Can't update client id
+                transaction_date=transaction_data.transaction_date,
+                amount=transaction_data.amount,
+                category=transaction_data.category,
+                description=transaction_data.description,
+                created_by=None # Can't update created_by
+            )
+
+            # Send DTO to service, get DTO back
+            result_dto = await self.transaction_service.update_transaction(update_dto, current_user)
+
+            # Convert DTO to Response
+            return FinancialTransactionResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                transaction_date=result_dto.transaction_date,
+                amount=result_dto.amount,
+                category=result_dto.category,
+                description=result_dto.description,
+                created_by=result_dto.created_by
             )
         except ValueError as e:
             if "not found" in str(e):
@@ -175,14 +220,10 @@ class FinancialTransactionController:
 
     async def delete_transaction(self,
                              transaction_id: UUID,
-                             current_user: User) -> bool:
+                             current_user: User) -> None:
         """Delete a transaction."""
-        try:
-            # First get the transaction to check access
-            transaction = self.transaction_service.get_transaction(transaction_id)
-            self._check_transaction_access(transaction, current_user)
-            
-            return self.transaction_service.delete_transaction(transaction_id, current_user)
+        try: 
+            await self.transaction_service.delete_transaction(transaction_id, current_user)
         except ValueError as e:
             if "not found" in str(e):
                 raise HTTPException(
