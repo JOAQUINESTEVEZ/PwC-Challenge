@@ -8,7 +8,6 @@ from ..controllers.financial_transaction_controller import FinancialTransactionC
 from ..schemas.request.financial_transaction import FinancialTransactionCreate, FinancialTransactionUpdate
 from ..schemas.response.financial_transaction import FinancialTransactionResponse
 from ..entities.user import User
-from ..entities.financial_transaction import FinancialTransaction
 from ..dependencies.auth import get_current_user, check_permissions
 
 router = APIRouter()

@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from ..models.user_model import User as UserModel
 from ..entities.user import User
-from .base_repository import BaseRepository
 
 class UserRepository:
     """

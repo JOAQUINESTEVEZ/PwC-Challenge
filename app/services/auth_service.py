@@ -2,7 +2,6 @@ from typing import Optional
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-import uuid
 from ..repositories.user_repository import UserRepository
 from ..repositories.client_repository import ClientRepository
 from ..entities.user import User

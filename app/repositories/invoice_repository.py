@@ -8,7 +8,6 @@ from decimal import Decimal
 
 from ..models.invoice_model import Invoice as InvoiceModel
 from ..entities.invoice import Invoice, InvoiceStatus
-from .base_repository import BaseRepository
 
 class InvoiceRepository:
     """Repository for Invoice specific database operations."""

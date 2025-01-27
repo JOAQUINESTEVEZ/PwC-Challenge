@@ -9,7 +9,6 @@ from ..schemas.request.client import ClientCreate, ClientUpdate
 from ..schemas.response.client import ClientResponse
 from ..dependencies.auth import get_current_user, check_permissions
 from ..dependencies.rate_limit import check_user_pdf_rate_limit
-from ..entities.client import Client
 from ..entities.user import User
 from ..controllers.report_controller import ReportController
 

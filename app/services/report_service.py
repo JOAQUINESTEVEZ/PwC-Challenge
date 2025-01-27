@@ -8,7 +8,6 @@ from ..repositories.financial_transaction_repository import FinancialTransaction
 from ..repositories.invoice_repository import InvoiceRepository
 from ..utils.pdf_generator import generate_financial_report
 from io import BytesIO
-from datetime import datetime, UTC
 
 class ReportService:
     """

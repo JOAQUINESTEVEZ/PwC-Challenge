@@ -1,13 +1,10 @@
-from typing import Optional, List
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models.user_model import User
 from ..utils.jwt import verify_token
 from ..repositories.user_repository import UserRepository
 from ..services.permission_service import PermissionService
-from ..utils.rate_limiter import RateLimiter, RateLimitExceeded
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -52,13 +49,15 @@ def check_permissions(required_resource: str, required_action: str):
         db: Session = Depends(get_db)
     ):
         permission_service = PermissionService(db)
-        has_permission = permission_service.check_permission(
+
+        # Check if Permission Entity is not None
+        permission_entity = await permission_service.check_permission(
             role_id=current_user.role_id,
             resource=required_resource,
             action=required_action
         )
         
-        if not has_permission:
+        if not permission_entity:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={

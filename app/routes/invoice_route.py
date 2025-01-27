@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import date
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..controllers.invoice_controller import InvoiceController

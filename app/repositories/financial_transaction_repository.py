@@ -1,11 +1,9 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from datetime import date
 from ..models.financial_transaction_model import FinancialTransaction as FinancialTransactionModel
 from ..entities.financial_transaction import FinancialTransaction
-from .base_repository import BaseRepository
 
 class FinancialTransactionRepository:
     """Repository for handling financial transaction database operations.

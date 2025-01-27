@@ -1,16 +1,39 @@
-from typing import TypeVar, Type, Optional
+from typing import Optional
 from sqlalchemy.orm import Session
-from uuid import UUID
-from .base_repository import BaseRepository
-from ..models.permission_model import Permission
-from ..schemas.permission_schema import PermissionCreate, PermissionUpdate
+from ..models.permission_model import Permission as PermissionModel
+from ..entities.permission import Permission
 
-class PermissionRepository(BaseRepository[Permission, PermissionCreate, PermissionUpdate]):
+class PermissionRepository:
     """
     Repository for handling permission-related CRUD operations.
     """
+    def __init__(self, db: Session):
+        """Initialize repository with db session."""
+        self.db = db
 
-    def get_permission(self, role_id: str, resource: str, action: str) -> Optional[Permission]:
+    def _to_model(self, entity: Permission) -> PermissionModel:
+        """Convert entity to model."""
+        return PermissionModel(
+            id=entity.id,
+            role_id=entity.role_id,
+            resource=entity.resource,
+            action=entity.action,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at
+        )
+    
+    def _to_entity(self, model: PermissionModel) -> Permission:
+        """Convert model to entity."""
+        return Permission(
+            id=model.id,
+            role_id=model.role_id,
+            resource=model.resource,
+            action=model.action,
+            created_at=model.created_at,
+            updated_at=model.updated_at
+        )
+
+    async def get_permission(self, role_id: str, resource: str, action: str) -> Optional[Permission]:
         """
         Retrieve a specific permission by role_id, resource, and action.
         
@@ -22,5 +45,5 @@ class PermissionRepository(BaseRepository[Permission, PermissionCreate, Permissi
         Returns:
             Optional[Permission]: The permission object or None
         """
-        return self.db.query(Permission).filter_by(role_id=role_id, resource=resource, action=action).first()
-
+        model = self.db.query(PermissionModel).filter_by(role_id=role_id, resource=resource, action=action).first()
+        return self._to_entity(model) if model else None

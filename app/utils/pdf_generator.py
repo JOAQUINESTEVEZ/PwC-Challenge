@@ -3,8 +3,7 @@ from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet
 
 def generate_financial_report(client_name: str, transactions: list, invoices: list) -> BytesIO:
     """Generate a PDF report with transactions and invoices history.

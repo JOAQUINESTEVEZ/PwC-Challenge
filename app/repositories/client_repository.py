@@ -1,7 +1,5 @@
 from typing import List, Optional
 from uuid import UUID
-from datetime import date
-from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models.client_model import Client as ClientModel
