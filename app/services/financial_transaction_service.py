@@ -4,9 +4,8 @@ from datetime import date, datetime, UTC
 from sqlalchemy.orm import Session
 from ..entities.user import User
 from ..entities.financial_transaction import FinancialTransaction
-from ..entities.audit_log import AuditLog
 from ..repositories.financial_transaction_repository import FinancialTransactionRepository
-from ..repositories.audit_log_repository import AuditLogRepository
+from .audit_log_service import AuditService
 from ..schemas.dto.transaction_dto import TransactionDTO
 from decimal import Decimal
 
@@ -24,29 +23,7 @@ class FinancialTransactionService:
             db: Database session
         """
         self.transaction_repository = FinancialTransactionRepository(db)
-        self.audit_log_repository = AuditLogRepository(db)
-
-    async def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-        """
-        Create an audit log entry.
-        
-        Args:
-            user_id: ID of user making the change
-            record_id: ID of affected record
-            change_type: Type of change (create, update, delete)
-            details: Change details
-        """
-        audit_log = AuditLog(
-            id=None,
-            changed_by=user_id,
-            table_name="financial_transactions",
-            record_id=record_id,
-            change_type=change_type,
-            change_details=details,
-            timestamp=datetime.now(UTC)
-        )
-
-        await self.audit_log_repository.create(audit_log)
+        self.audit_service = AuditService(db)
 
     async def create_transaction(self, transaction_dto: TransactionDTO, current_user: User) -> TransactionDTO:
         """
@@ -77,11 +54,12 @@ class FinancialTransactionService:
             saved_transaction = await self.transaction_repository.create(transaction_entity)
 
             # Create Log
-            await self._create_audit_log(
+            await self.audit_service.log_change(
                 user_id=current_user.id,
                 record_id=saved_transaction.id,
+                table_name="financial_transactions",
                 change_type="CREATE",
-                details=f"Transaction created for client id {saved_transaction.client_id}"
+                details=f"Created financial transaction for client {saved_transaction.client_id}"
             )
 
             # Convert entity to DTO
@@ -201,11 +179,12 @@ class FinancialTransactionService:
             updated_transaction = await self.transaction_repository.update(existing_transaction)
 
             # Create Log
-            await self._create_audit_log(
+            await self.audit_service.log_change(
                 user_id=current_user.id,
                 record_id=updated_transaction.id,
+                table_name="financial_transactions",
                 change_type="UPDATE",
-                details=f"Updated transaction {updated_transaction.id}"
+                details=f"Updated financial transaction for client {updated_transaction.client_id}"
             )
 
             # Convert entity to DTO and return
@@ -230,9 +209,10 @@ class FinancialTransactionService:
         await self.transaction_repository.delete(transaction_id)
 
         # Create Log
-        await self._create_audit_log(
+        await self.audit_service.log_change(
             user_id=current_user.id,
             record_id=transaction_id,
+            table_name="financial_transactions",
             change_type="DELETE",
-            details=f"Deleted transaction {transaction_id}"
+            details=f"Deleted financial transaction for client {transaction.client_id}"
         )

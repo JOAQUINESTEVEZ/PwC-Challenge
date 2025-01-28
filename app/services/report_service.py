@@ -25,7 +25,6 @@ class ReportService:
         self.client_repository = ClientRepository(db)
         self.transaction_repository = FinancialTransactionRepository(db)
         self.invoice_repository = InvoiceRepository(db)
-        self.db = db
 
     async def _get_client_data(self, client_id: UUID) -> Client:
         """

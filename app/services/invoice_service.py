@@ -3,11 +3,10 @@ from uuid import UUID
 from datetime import date, datetime, UTC
 from decimal import Decimal
 from sqlalchemy.orm import Session
+from .audit_log_service import AuditService
 from ..repositories.invoice_repository import InvoiceRepository
-from ..repositories.audit_log_repository import AuditLogRepository
 from ..entities.user import User
 from ..entities.invoice import Invoice, InvoiceStatus
-from ..entities.audit_log import AuditLog
 from ..schemas.dto.invoice_dto import InvoiceDTO
 
 class InvoiceService:
@@ -19,29 +18,7 @@ class InvoiceService:
     def __init__(self, db: Session):
         """Initialize service with database session."""
         self.invoice_repository = InvoiceRepository(db)
-        self.audit_log_repository = AuditLogRepository(db)
-
-    async def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-        """
-        Create an audit log entry.
-        
-        Args:
-            user_id: ID of user making the change
-            record_id: ID of affected record
-            change_type: Type of change (create, update, delete)
-            details: Change details
-        """
-        audit_log = AuditLog(
-            id=None,
-            changed_by=user_id,
-            table_name="invoices",
-            record_id=record_id,
-            change_type=change_type,
-            change_details=details,
-            timestamp=datetime.now(UTC)
-        )
-
-        await self.audit_log_repository.create(audit_log)
+        self.audit_service = AuditService(db)
 
     async def create_invoice(self, invoice_dto: InvoiceDTO, current_user: User) -> InvoiceDTO:
         """
@@ -80,9 +57,10 @@ class InvoiceService:
             saved_invoice = await self.invoice_repository.create(invoice)
 
             # Create Log
-            await self._create_audit_log(
+            await self.audit_service.log_change(
                 user_id=current_user.id,
                 record_id=saved_invoice.id,
+                table_name="invoices",
                 change_type="CREATE",
                 details=f"Created invoice for client {saved_invoice.client_id}"
             )
@@ -208,11 +186,12 @@ class InvoiceService:
             updated_invoice = await self.invoice_repository.update(existing_invoice)
 
             # Create Log
-            await self._create_audit_log(
+            await self.audit_service.log_change(
                 user_id=current_user.id,
                 record_id=updated_invoice.id,
+                table_name="invoices",
                 change_type="UPDATE",
-                details=f"Updated invoice {updated_invoice.id}"
+                details=f"Updated invoice for client {updated_invoice.client_id}"
             )
 
             # Convert entity to DTO and return
@@ -245,11 +224,12 @@ class InvoiceService:
         await self.invoice_repository.delete(invoice_id)
 
         # Create Log
-        await self._create_audit_log(
+        await self.audit_service.log_change(
             user_id=current_user.id,
             record_id=invoice_id,
+            table_name="invoices",
             change_type="DELETE",
-            details=f"Deleted invoice {invoice_id}"
+            details=f"Deleted invoice for client {invoice.client_id}"
         )
 
     async def get_overdue_invoices(self, client_id: Optional[UUID] = None) -> List[InvoiceDTO]:
