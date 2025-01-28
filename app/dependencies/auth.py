@@ -1,9 +1,7 @@
-from typing import Optional, List
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models.user_model import User
 from ..utils.jwt import verify_token
 from ..repositories.user_repository import UserRepository
 from ..services.permission_service import PermissionService
@@ -29,8 +27,8 @@ async def get_current_user(
             }
         )
     
-    user_repository = UserRepository(User, db)
-    user = user_repository.get(user_id)
+    user_repository = UserRepository(db)
+    user = await user_repository.get_by_id(user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,13 +49,15 @@ def check_permissions(required_resource: str, required_action: str):
         db: Session = Depends(get_db)
     ):
         permission_service = PermissionService(db)
-        has_permission = permission_service.check_permission(
+
+        # Check if Permission Entity is not None
+        permission_entity = await permission_service.check_permission(
             role_id=current_user.role_id,
             resource=required_resource,
             action=required_action
         )
         
-        if not has_permission:
+        if not permission_entity:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={

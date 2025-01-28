@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
+from typing import Optional
 from ..repositories.permission_repository import PermissionRepository
-from ..models.permission_model import Permission
-from ..schemas.permission_schema import PermissionCreate, PermissionUpdate
+from ..entities.permission import Permission
 
 class PermissionService:
     """
@@ -9,11 +9,11 @@ class PermissionService:
     """
 
     def __init__(self, db: Session):
-        self.permission_repo = PermissionRepository(Permission, db)
+        self.permission_repo = PermissionRepository(db)
 
-    def check_permission(self, role_id: str, resource: str, action: str) -> bool:
+    async def check_permission(self, role_id: str, resource: str, action: str) -> Optional[Permission]:
         """
         Check if the given role_id has the required resource and action permission.
         """
-        permission = self.permission_repo.get_permission(role_id, resource, action)
-        return permission is not None
+        permission_entity = await self.permission_repo.get_permission(role_id, resource, action)
+        return permission_entity is not None

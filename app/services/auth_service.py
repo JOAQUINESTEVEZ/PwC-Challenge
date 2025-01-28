@@ -2,13 +2,14 @@ from typing import Optional
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-import uuid
 from ..repositories.user_repository import UserRepository
 from ..repositories.client_repository import ClientRepository
-from ..models.user_model import User
-from ..models.client_model import Client
-from ..schemas.auth_schema import LoginResponse
-from ..schemas.signup_schema import SignupRequest
+from .audit_log_service import AuditService
+from ..entities.user import User
+from ..entities.client import Client
+from ..schemas.response.login import LoginResponse
+from ..schemas.dto.client_dto import ClientDTO
+from ..schemas.dto.user_dto import UserDTO
 from ..utils.jwt import create_access_token
 from fastapi import HTTPException, status
 
@@ -16,15 +17,15 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class AuthService:
     def __init__(self, db: Session):
-        self.user_repository = UserRepository(User, db)
-        self.client_repository = ClientRepository(Client, db)
-        self.db = db
+        self.user_repository = UserRepository(db)
+        self.client_repository = ClientRepository(db)
+        self.audit_service = AuditService(db)
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return pwd_context.verify(plain_password, hashed_password)
 
-    def authenticate_user(self, username: str, password: str) -> Optional[LoginResponse]:
-        user = self.user_repository.get_by_username(username)
+    async def authenticate_user(self, username: str, password: str) -> Optional[LoginResponse]:
+        user = await self.user_repository.get_by_username(username)
         if not user or not self.verify_password(password, user.password_hash):
             return None
             
@@ -37,12 +38,12 @@ class AuthService:
         access_token = create_access_token(token_data)
         return LoginResponse(access_token=access_token, token_type="bearer")
 
-    def signup_client(self, signup_data: SignupRequest) -> LoginResponse:
+    async def signup_client(self, client_dto:ClientDTO, user_dto:UserDTO) -> LoginResponse:
         """
         Register a new client user and create corresponding client record.
         """
         # Check if username exists
-        if self.user_repository.get_by_username(signup_data.username):
+        if await self.user_repository.get_by_username(user_dto.username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -55,7 +56,7 @@ class AuthService:
             )
 
         # Check if email exists
-        if self.user_repository.get_by_email(signup_data.email):
+        if await self.user_repository.get_by_email(user_dto.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -68,7 +69,7 @@ class AuthService:
             )
 
         # Check if company name exists
-        if self.client_repository.get_client_by_name(signup_data.company_name):
+        if await self.client_repository.get_client_by_name(client_dto.name):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -81,50 +82,69 @@ class AuthService:
             )
 
         try:
-            # Create client record
-            client = Client(
-                id=uuid.uuid4(),
-                name=signup_data.company_name,
-                industry=signup_data.industry,
-                contact_email=signup_data.contact_email,
-                contact_phone=signup_data.contact_phone,
-                address=signup_data.address,
+            # Convert DTO to entity
+            client_entity = Client(
+                id=None,
+                name=client_dto.name,
+                industry=client_dto.industry,
+                contact_email=client_dto.contact_email,
+                contact_phone=client_dto.contact_phone,
+                address=client_dto.address,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC)
             )
-            self.db.add(client)
-            self.db.flush()  # Flush to get the client ID
 
+            # Save through repository
+            saved_client_entity = await self.client_repository.create(client_entity)
+
+            hashed_password = pwd_context.hash(user_dto.password_hash)
             # Create user with client role
             client_role_id = "094f40bd-14de-48b0-8979-c8a7da41cab2"  # Client role ID
-            hashed_password = pwd_context.hash(signup_data.password)
-            
-            user = User(
-                id=uuid.uuid4(),
-                username=signup_data.username,
-                email=signup_data.email,
+
+            user_entity = User(
+                id=None,
+                username=user_dto.username,
+                email=user_dto.email,
                 password_hash=hashed_password,
                 role_id=client_role_id,
-                client_id=client.id,
+                role="client",
+                client_id=saved_client_entity.id,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC)
             )
-            self.db.add(user)
-            self.db.commit()
 
+            # Save through repository
+            saved_user_entity = await self.user_repository.create(user_entity)
+            
             # Generate access token
             token_data = {
-                "sub": str(user.id),
-                "username": user.username,
+                "sub": str(saved_user_entity.id),
+                "username": saved_user_entity.username,
                 "role": "client",
-                "client_id": str(client.id)
+                "client_id": str(saved_user_entity.client_id)
             }
             
             access_token = create_access_token(token_data)
+
+            # Create Logs
+            await self.audit_service.log_change(
+                user_id=None,
+                record_id=saved_client_entity.id,
+                table_name="clients",
+                change_type="CREATE",
+                details=f"Created client {saved_client_entity.name}"
+            )
+            await self.audit_service.log_change(
+                user_id=None,
+                record_id=saved_user_entity.id,
+                table_name="users",
+                change_type="CREATE",
+                details=f"Created user {saved_user_entity.username}"
+            )
+
             return LoginResponse(access_token=access_token, token_type="bearer")
 
         except Exception as e:
-            self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={

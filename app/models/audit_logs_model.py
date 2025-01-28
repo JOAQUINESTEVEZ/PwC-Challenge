@@ -9,7 +9,7 @@ class AuditLog(Base):
     __tablename__ = 'audit_logs'
     
     id = Column(UUID, primary_key=True, index=True, default=uuid.uuid4)
-    changed_by = Column(UUID, ForeignKey('users.id'))
+    changed_by = Column(UUID, ForeignKey('users.id'), nullable=True)
     table_name = Column(String(50), nullable=False)
     record_id = Column(UUID, nullable=False)
     change_type = Column(String(20), nullable=False)

@@ -3,8 +3,11 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from ..services.client_service import ClientService
-from ..schemas.client_schema import Client, ClientCreate, ClientUpdate
-from ..models.user_model import User
+from ..schemas.request.client import ClientCreate, ClientUpdate
+from ..schemas.response.client import ClientResponse
+from ..schemas.dto.client_dto import ClientDTO
+from ..entities.client import Client
+from ..entities.user import User
 
 class ClientController:
     """
@@ -66,22 +69,43 @@ class ClientController:
                 }
             )
 
-    async def create_client(self, client_data: ClientCreate, current_user: User) -> Client:
+    async def create_client(self, client_data: ClientCreate, current_user: User) -> ClientResponse:
         """
         Create a new client.
         
         Args:
-            client_data: Client data to create
+            client_data: ClientCreate data to create
             current_user: Current authenticated user
             
         Returns:
-            Client: Created client
+            ClientResponse: Created client
             
         Raises:
             HTTPException: If creation fails or permissions not met
         """
         try:
-            return self.client_service.create_client(client_data, current_user)
+            # Convert Request to DTO
+            client_dto = ClientDTO(
+                id = None,
+                name = client_data.name,
+                industry= client_data.industry,
+                contact_email= client_data.contact_email,
+                contact_phone= client_data.contact_phone,
+                address = client_data.address
+            )
+
+            # Send DTO to service, get DTO back
+            result_dto = await self.client_service.create_client(client_dto, current_user)
+
+            # Convert DTO to Response
+            return ClientResponse(
+                id = result_dto.id,
+                name = result_dto.name,
+                industry = result_dto.industry,
+                contact_email = result_dto.contact_email,
+                contact_phone = result_dto.contact_phone,
+                address = result_dto.address
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,7 +118,7 @@ class ClientController:
                 }
             )
 
-    async def get_client(self, client_id: UUID, current_user: User) -> Client:
+    async def get_client(self, client_id: UUID, current_user: User) -> ClientResponse:
         """
         Get a client by ID.
         
@@ -103,7 +127,7 @@ class ClientController:
             current_user: Current authenticated user
             
         Returns:
-            Client: Found client
+            ClientResponse: Found client
             
         Raises:
             HTTPException: If client not found or access denied
@@ -112,7 +136,18 @@ class ClientController:
         self._check_client_access(client_id, current_user)
         
         try:
-            return self.client_service.get_client(client_id, current_user)
+            result_dto = await self.client_service.get_client(client_id)
+
+            # Convert DTO to Response
+            return ClientResponse(
+                id = result_dto.id,
+                name = result_dto.name,
+                industry = result_dto.industry,
+                contact_email = result_dto.contact_email,
+                contact_phone = result_dto.contact_phone,
+                address = result_dto.address
+            )
+
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -125,7 +160,7 @@ class ClientController:
                 }
             )
 
-    async def get_all_clients(self, skip: int = 0, limit: int = 100, current_user: User = None) -> List[Client]:
+    async def get_all_clients(self, skip: int = 0, limit: int = 100, current_user: User = None) -> List[ClientResponse]:
         """
         Get all clients with pagination.
         
@@ -135,17 +170,28 @@ class ClientController:
             current_user: Current authenticated user
             
         Returns:
-            List[Client]: List of clients
+            List[ClientResponse]: List of clients
         """
-        clients = self.client_service.get_all_clients(skip, limit)
+        client_dtos = await self.client_service.get_all_clients(skip, limit)
         
         # Filter for client role
         if current_user.role.name == "client":
-            clients = [c for c in clients if str(c.id) == str(current_user.client_id)]
+            client_dtos = [c for c in client_dtos if str(c.id) == str(current_user.client_id)]
             
-        return clients
+        # Convert DTOS to Responses
+        return [
+            ClientResponse(
+                id = dto.id,
+                name = dto.name,
+                industry = dto.industry,
+                contact_email = dto.contact_email,
+                contact_phone = dto.contact_phone,
+                address = dto.address
+            )
+            for dto in client_dtos
+        ]
 
-    async def update_client(self, client_id: UUID, client_data: ClientUpdate, current_user: User) -> Client:
+    async def update_client(self, client_id: UUID, client_data: ClientUpdate, current_user: User) -> ClientResponse:
         """
         Update a client.
         
@@ -155,7 +201,7 @@ class ClientController:
             current_user: Current authenticated user
             
         Returns:
-            Client: Updated client
+            ClientResponse: Updated client
             
         Raises:
             HTTPException: If update fails or access denied
@@ -164,7 +210,29 @@ class ClientController:
         self._check_client_access(client_id, current_user)
         
         try:
-            return self.client_service.update_client(client_id, client_data, current_user)
+            # Convert Request to DTO
+            update_dto = ClientDTO(
+                id = client_id,
+                name = client_data.name,
+                industry = client_data.industry,
+                contact_email = client_data.contact_email,
+                contact_phone = client_data.contact_phone,
+                address = client_data.address
+            )
+
+            # Send DTO to service
+            result_dto = await self.client_service.update_client(update_dto, current_user)
+
+            # Convert DTO to Response
+            return ClientResponse(
+                id = result_dto.id,
+                name = result_dto.name,
+                industry = result_dto.industry,
+                contact_email = result_dto.contact_email,
+                contact_phone = result_dto.contact_phone,
+                address = result_dto.address
+            )
+
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -177,7 +245,7 @@ class ClientController:
                 }
             )
 
-    async def delete_client(self, client_id: UUID, current_user: User) -> bool:
+    async def delete_client(self, client_id: UUID, current_user: User) -> None:
         """
         Delete a client.
         
@@ -186,7 +254,7 @@ class ClientController:
             current_user: Current authenticated user
             
         Returns:
-            bool: True if deleted, False if not found
+            None
             
         Raises:
             HTTPException: If deletion fails or access denied
@@ -195,7 +263,7 @@ class ClientController:
         self._check_admin_access(current_user)
         
         try:
-            return self.client_service.delete_client(client_id, current_user)
+            await self.client_service.delete_client(client_id, current_user)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -208,7 +276,7 @@ class ClientController:
                 }
             )
 
-    async def search_clients(self, search_term: str, current_user: User) -> List[Client]:
+    async def search_clients(self, search_term: str, current_user: User) -> List[ClientResponse]:
         """
         Search clients by name or industry.
         
@@ -217,12 +285,31 @@ class ClientController:
             current_user: Current authenticated user
             
         Returns:
-            List[Client]: List of matching clients
+            List[ClientResponse]: List of matching clients
         """
-        clients = self.client_service.search_clients(search_term)
+        try:
+            # Get Clients
+            client_dtos = await self.client_service.search_clients(search_term)
         
-        # Filter for client role
-        if current_user.role.name == "client":
-            clients = [c for c in clients if str(c.id) == str(current_user.client_id)]
+            # Filter for client role
+            if current_user.role.name == "client":
+                client_dtos = [c for c in client_dtos if str(c.id) == str(current_user.client_id)]
             
-        return clients
+            # Convert DTOS to Responses
+            return [
+                ClientResponse(
+                    id = dto.id,
+                    name = dto.name,
+                    industry = dto.industry,
+                    contact_email = dto.contact_email,
+                    contact_phone = dto.contact_phone,
+                    address = dto.address
+                )
+                for dto in client_dtos
+            ]
+        
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e)
+            )

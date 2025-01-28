@@ -2,7 +2,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from ..services.report_service import ReportService
-from ..models.user_model import User
+from ..entities.user import User
+
 from io import BytesIO
 
 class ReportController:
@@ -63,7 +64,7 @@ class ReportController:
         self._check_client_access(client_id, current_user)
         
         try:
-            return self.report_service.generate_client_financial_report(client_id)
+            return await self.report_service.generate_client_financial_report(client_id)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

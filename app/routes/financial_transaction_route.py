@@ -5,18 +5,15 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..controllers.financial_transaction_controller import FinancialTransactionController
-from ..schemas.financial_transaction_schema import (
-    FinancialTransaction,
-    FinancialTransactionCreate,
-    FinancialTransactionUpdate
-)
+from ..schemas.request.financial_transaction import FinancialTransactionCreate, FinancialTransactionUpdate
+from ..schemas.response.financial_transaction import FinancialTransactionResponse
+from ..entities.user import User
 from ..dependencies.auth import get_current_user, check_permissions
-from ..models.user_model import User
 
 router = APIRouter()
 
 @router.post("",
-            response_model=FinancialTransaction,
+            response_model=FinancialTransactionResponse,
             status_code=status.HTTP_201_CREATED,
             dependencies=[Depends(check_permissions("financial_transactions", "create"))],
             responses={
@@ -29,7 +26,7 @@ async def create_transaction(
     transaction_data: FinancialTransactionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FinancialTransaction:
+) -> FinancialTransactionResponse:
     """
     Create a new financial transaction.
 
@@ -39,7 +36,7 @@ async def create_transaction(
         db: Database session
 
     Returns:
-        FinancialTransaction: Created transaction
+        FinancialTransactionResponse: Created transaction
 
     Raises:
         HTTPException: If creation fails or permissions not met
@@ -48,7 +45,7 @@ async def create_transaction(
     return await controller.create_transaction(transaction_data, current_user)
 
 @router.get("/{transaction_id}",
-           response_model=FinancialTransaction,
+           response_model=FinancialTransactionResponse,
            dependencies=[Depends(check_permissions("financial_transactions", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -59,7 +56,7 @@ async def get_transaction(
     transaction_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FinancialTransaction:
+) -> FinancialTransactionResponse:
     """
     Get a specific financial transaction by ID.
 
@@ -69,7 +66,7 @@ async def get_transaction(
         db: Database session
 
     Returns:
-        FinancialTransaction: Retrieved transaction
+        FinancialTransactionResponse: Retrieved transaction
 
     Raises:
         HTTPException: If transaction not found or access denied
@@ -78,7 +75,7 @@ async def get_transaction(
     return await controller.get_transaction(transaction_id, current_user)
 
 @router.get("",
-           response_model=List[FinancialTransaction],
+           response_model=List[FinancialTransactionResponse],
            dependencies=[Depends(check_permissions("financial_transactions", "read"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -93,7 +90,7 @@ async def search_transactions(
     max_amount: Optional[float] = Query(None, description="Maximum transaction amount"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[FinancialTransaction]:
+) -> List[FinancialTransactionResponse]:
     """
     Search and filter financial transactions.
 
@@ -108,7 +105,7 @@ async def search_transactions(
         db: Database session
 
     Returns:
-        List[FinancialTransaction]: List of matching transactions
+        List[FinancialTransactionResponse]: List of matching transactions
     """
     controller = FinancialTransactionController(db)
     return await controller.search_transactions(
@@ -122,7 +119,7 @@ async def search_transactions(
     )
 
 @router.put("/{transaction_id}",
-           response_model=FinancialTransaction,
+           response_model=FinancialTransactionResponse,
            dependencies=[Depends(check_permissions("financial_transactions", "update"))],
            responses={
                401: {"description": "Not authenticated"},
@@ -135,7 +132,7 @@ async def update_transaction(
     transaction_data: FinancialTransactionUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FinancialTransaction:
+) -> FinancialTransactionResponse:
     """
     Update an existing financial transaction.
 
@@ -146,7 +143,7 @@ async def update_transaction(
         db: Database session
 
     Returns:
-        FinancialTransaction: Updated transaction
+        FinancialTransactionResponse: Updated transaction
 
     Raises:
         HTTPException: If transaction not found or update fails

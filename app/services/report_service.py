@@ -1,14 +1,13 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
-from ..models.client_model import Client
-from ..models.financial_transaction_model import FinancialTransaction
-from ..models.invoice_model import Invoice
+from ..entities.client import Client
+from ..entities.financial_transaction import FinancialTransaction
+from ..entities.invoice import Invoice
 from ..repositories.client_repository import ClientRepository
 from ..repositories.financial_transaction_repository import FinancialTransactionRepository
 from ..repositories.invoice_repository import InvoiceRepository
 from ..utils.pdf_generator import generate_financial_report
 from io import BytesIO
-from datetime import datetime, UTC
 
 class ReportService:
     """
@@ -23,12 +22,11 @@ class ReportService:
         Args:
             db: Database session
         """
-        self.client_repository = ClientRepository(Client, db)
-        self.transaction_repository = FinancialTransactionRepository(FinancialTransaction, db)
-        self.invoice_repository = InvoiceRepository(Invoice, db)
-        self.db = db
+        self.client_repository = ClientRepository(db)
+        self.transaction_repository = FinancialTransactionRepository(db)
+        self.invoice_repository = InvoiceRepository(db)
 
-    def _get_client_data(self, client_id: UUID) -> Client:
+    async def _get_client_data(self, client_id: UUID) -> Client:
         """
         Get client data with validation.
         
@@ -41,12 +39,12 @@ class ReportService:
         Raises:
             ValueError: If client not found
         """
-        client = self.client_repository.get(client_id)
+        client = await self.client_repository.get_by_id(client_id)
         if not client:
             raise ValueError(f"Client with id '{client_id}' not found")
         return client
 
-    def _get_client_transactions(self, client_id: UUID) -> list[FinancialTransaction]:
+    async def _get_client_transactions(self, client_id: UUID) -> list[FinancialTransaction]:
         """
         Get client transactions ordered by date.
         
@@ -56,11 +54,11 @@ class ReportService:
         Returns:
             list[FinancialTransaction]: List of ordered transactions
         """
-        return self.transaction_repository.get_by_client_id(
+        return await self.transaction_repository.get_by_client_id(
             client_id=client_id
         )
 
-    def _get_client_invoices(self, client_id: UUID) -> list[Invoice]:
+    async def _get_client_invoices(self, client_id: UUID) -> list[Invoice]:
         """
         Get client invoices ordered by date.
         
@@ -70,11 +68,11 @@ class ReportService:
         Returns:
             list[Invoice]: List of ordered invoices
         """
-        return self.invoice_repository.get_by_client_id(
+        return await self.invoice_repository.get_by_client_id(
             client_id=client_id
         )
 
-    def generate_client_financial_report(self, client_id: UUID) -> BytesIO:
+    async def generate_client_financial_report(self, client_id: UUID) -> BytesIO:
         """
         Generate a complete financial report for a client.
         
@@ -88,11 +86,11 @@ class ReportService:
             ValueError: If client not found or report generation fails
         """
         # Get and validate client
-        client = self._get_client_data(client_id)
+        client = await self._get_client_data(client_id)
         
         # Get transactions and invoices
-        transactions = self._get_client_transactions(client_id)
-        invoices = self._get_client_invoices(client_id)
+        transactions = await self._get_client_transactions(client_id)
+        invoices = await self._get_client_invoices(client_id)
         
         try:
             # Generate PDF using utility function

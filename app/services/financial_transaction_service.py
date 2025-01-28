@@ -2,11 +2,11 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date, datetime, UTC
 from sqlalchemy.orm import Session
-from ..models.financial_transaction_model import FinancialTransaction
-from ..models.user_model import User
+from ..entities.user import User
+from ..entities.financial_transaction import FinancialTransaction
 from ..repositories.financial_transaction_repository import FinancialTransactionRepository
-from ..schemas.financial_transaction_schema import FinancialTransactionCreate, FinancialTransactionUpdate
-from ..models.audit_logs_model import AuditLog
+from .audit_log_service import AuditService
+from ..schemas.dto.transaction_dto import TransactionDTO
 from decimal import Decimal
 
 class FinancialTransactionService:
@@ -22,77 +22,53 @@ class FinancialTransactionService:
         Args:
             db: Database session
         """
-        self.transaction_repository = FinancialTransactionRepository(FinancialTransaction, db)
-        self.db = db
+        self.transaction_repository = FinancialTransactionRepository(db)
+        self.audit_service = AuditService(db)
 
-    def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-        """
-        Create an audit log entry for transaction changes.
-        
-        Args:
-            user_id: ID of user making the change
-            record_id: ID of affected transaction
-            change_type: Type of change (create, update, delete)
-            details: Change details
-        """
-        audit_log = AuditLog(
-            changed_by=user_id,
-            table_name="financial_transactions",
-            record_id=record_id,
-            change_type=change_type,
-            change_details=details,
-            timestamp=datetime.now(UTC)
-        )
-        self.db.add(audit_log)
-        self.db.commit()
-
-    def _validate_transaction_amount(self, amount: Decimal) -> None:
-        """
-        Validate transaction amount.
-        
-        Args:
-            amount: Transaction amount to validate
-            
-        Raises:
-            ValueError: If amount is invalid
-        """
-        if amount <= Decimal('0'):
-            raise ValueError("Transaction amount must be positive")
-
-    def create_transaction(self, transaction_data: FinancialTransactionCreate, current_user: User) -> FinancialTransaction:
+    async def create_transaction(self, transaction_dto: TransactionDTO, current_user: User) -> TransactionDTO:
         """
         Create a new financial transaction.
         
         Args:
-            transaction_data: Data for transaction creation
+            transaction_dto: Data for transaction creation
             current_user: User creating the transaction
             
         Returns:
-            FinancialTransaction: Created transaction
-            
-        Raises:
-            ValueError: If validation fails
+            TransactionDTO: Created transaction
         """
-        # Validate amount
-        self._validate_transaction_amount(transaction_data.amount)
-        
-        # Create transaction
-        transaction_dict = transaction_data.model_dump()
-        transaction_dict["created_by"] = current_user.id
-        
-        transaction = self.transaction_repository.create(transaction_dict)
-        
-        # Create audit log
-        self._create_audit_log(
-            user_id=current_user.id,
-            record_id=transaction.id,
-            change_type="create",
-            details=f"Created transaction of {transaction.amount} for client {transaction.client_id}"
-        )
-        
-        return transaction
+        try:
+            # Convert DTO to entity
+            transaction_entity = FinancialTransaction(
+                id=None,
+                client_id=transaction_dto.client_id,
+                created_by=transaction_dto.created_by,
+                transaction_date=transaction_dto.transaction_date,
+                amount=transaction_dto.amount,
+                category=transaction_dto.category,
+                description=transaction_dto.description,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC)
+            )
 
-    def get_transaction(self, transaction_id: UUID) -> FinancialTransaction:
+            # Save through repository
+            saved_transaction = await self.transaction_repository.create(transaction_entity)
+
+            # Create Log
+            await self.audit_service.log_change(
+                user_id=current_user.id,
+                record_id=saved_transaction.id,
+                table_name="financial_transactions",
+                change_type="CREATE",
+                details=f"Created financial transaction for client {saved_transaction.client_id}"
+            )
+
+            # Convert entity to DTO
+            return TransactionDTO.from_entity(saved_transaction)
+        
+        except Exception as e:
+            raise ValueError(f"Error creating transaction: {str(e)}")
+        
+    async def get_transaction(self, transaction_id: UUID) -> TransactionDTO:
         """
         Get transaction by ID.
         
@@ -100,24 +76,24 @@ class FinancialTransactionService:
             transaction_id: UUID of transaction to retrieve
             
         Returns:
-            FinancialTransaction: Found transaction
+            TransactionDTO: Found transaction
             
         Raises:
             ValueError: If transaction not found
         """
-        transaction = self.transaction_repository.get(transaction_id)
+        transaction = await self.transaction_repository.get_by_id(transaction_id)
         if not transaction:
             raise ValueError(f"Transaction with id '{transaction_id}' not found")
             
-        return transaction
+        return TransactionDTO.from_entity(transaction)
 
-    def search_transactions(self,
+    async def search_transactions(self,
                         client_id: Optional[UUID] = None,
                         category: Optional[str] = None,
                         start_date: Optional[date] = None,
                         end_date: Optional[date] = None,
                         min_amount: Optional[float] = None,
-                        max_amount: Optional[float] = None) -> List[FinancialTransaction]:
+                        max_amount: Optional[float] = None) -> List[TransactionDTO]:
         """
         Search transactions with filters.
         
@@ -130,84 +106,113 @@ class FinancialTransactionService:
             max_amount: Optional maximum amount filter
             
         Returns:
-            List[FinancialTransaction]: List of matching transactions
+            List[TransactionDTO]: List of matching transactions
             
         Raises:
             ValueError: If date range is invalid
         """
-        # Validate date range
-        if start_date and end_date and end_date < start_date:
-            raise ValueError("End date cannot be before start date")
+        try:
+            if start_date and end_date and end_date < start_date:
+                raise ValueError("End date cannot be before start date")
             
-        return self.transaction_repository.search_transactions(
-            client_id=client_id,
-            category=category,
-            start_date=start_date,
-            end_date=end_date,
-            min_amount=min_amount,
-            max_amount=max_amount
-        )
+            # Convert amounts to Decimal if provided
+            min_amount_decimal = Decimal(str(min_amount)) if min_amount is not None else None
+            max_amount_decimal = Decimal(str(max_amount)) if max_amount is not None else None
 
-    def update_transaction(self, 
-                       transaction_id: UUID, 
-                       transaction_data: FinancialTransactionUpdate,
-                       current_user: User) -> FinancialTransaction:
+            # Get filtered transactions
+            transactions = await self.transaction_repository.search_transactions(
+                client_id=client_id,
+                category=category,
+                start_date=start_date,
+                end_date=end_date,
+                min_amount=min_amount_decimal,
+                max_amount=max_amount_decimal
+            )
+
+            # Convert to DTOs
+            return [
+                TransactionDTO.from_entity(transaction)
+                for transaction in transactions
+            ]
+        
+        except Exception as e:
+            raise ValueError(f"Error searching transactions: {str(e)}")
+
+    async def update_transaction(self, 
+                       transaction_dto: TransactionDTO,
+                       current_user: User) -> TransactionDTO:
         """
         Update an existing transaction.
         
         Args:
-            transaction_id: UUID of transaction to update
-            transaction_data: Updated transaction data
+            transaction_dto: Updated transaction data
             current_user: User performing the update
             
         Returns:
-            FinancialTransaction: Updated transaction
+            TransactionDTO: Updated transaction
             
         Raises:
             ValueError: If transaction not found or validation fails
         """
-        # Check if transaction exists
-        transaction = self.get_transaction(transaction_id)
-        
-        # Validate amount if provided
-        if transaction_data.amount is not None:
-            self._validate_transaction_amount(transaction_data.amount)
-        
-        updated_transaction = self.transaction_repository.update(transaction_id, transaction_data)
-        
-        # Create audit log
-        self._create_audit_log(
-            user_id=current_user.id,
-            record_id=transaction_id,
-            change_type="update",
-            details=f"Updated transaction {transaction_id}"
-        )
-        
-        return updated_transaction
+        try:
+            # Get existing transaction
+            existing_transaction = await self.transaction_repository.get_by_id(transaction_dto.id)
+            if not existing_transaction:
+                raise ValueError(f"Transaction with id {transaction_dto.id} not found")
+            
+            # Update fields while preserving others
+            if transaction_dto.amount:
+                existing_transaction.amount = transaction_dto.amount
+            if transaction_dto.category:
+                existing_transaction.category = transaction_dto.category
+            if transaction_dto.description:
+                existing_transaction.description = transaction_dto.description
+            if transaction_dto.transaction_date:
+                existing_transaction.transaction_date = transaction_dto.transaction_date
 
-    def delete_transaction(self, transaction_id: UUID, current_user: User) -> bool:
+            # Apply business rules
+            existing_transaction.validate_amount()
+            existing_transaction.validate_dates()
+            existing_transaction.updated_at = datetime.now(UTC)
+
+            # Save updates
+            updated_transaction = await self.transaction_repository.update(existing_transaction)
+
+            # Create Log
+            await self.audit_service.log_change(
+                user_id=current_user.id,
+                record_id=updated_transaction.id,
+                table_name="financial_transactions",
+                change_type="UPDATE",
+                details=f"Updated financial transaction for client {updated_transaction.client_id}"
+            )
+
+            # Convert entity to DTO and return
+            return TransactionDTO.from_entity(updated_transaction)
+
+        except Exception as e:
+            raise ValueError(f"Error updating transaction: {str(e)}")
+
+    async def delete_transaction(self, transaction_id: UUID, current_user: User) -> None:
         """
         Delete a transaction.
         
         Args:
             transaction_id: UUID of transaction to delete
             current_user: User performing the deletion
-            
-        Returns:
-            bool: True if deleted, False if not found
         """
         # Verify transaction exists
-        transaction = self.get_transaction(transaction_id)
+        transaction = await self.transaction_repository.get_by_id(transaction_id)
+        if not transaction:
+            raise ValueError(f"Transaction with id {transaction_id} not found")
         
-        result = self.transaction_repository.delete(transaction_id)
-        
-        if result:
-            # Create audit log
-            self._create_audit_log(
-                user_id=current_user.id,
-                record_id=transaction_id,
-                change_type="delete",
-                details=f"Deleted transaction {transaction_id}"
-            )
-            
-        return result
+        await self.transaction_repository.delete(transaction_id)
+
+        # Create Log
+        await self.audit_service.log_change(
+            user_id=current_user.id,
+            record_id=transaction_id,
+            table_name="financial_transactions",
+            change_type="DELETE",
+            details=f"Deleted financial transaction for client {transaction.client_id}"
+        )

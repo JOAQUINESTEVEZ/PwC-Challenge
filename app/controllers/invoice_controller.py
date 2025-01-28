@@ -4,12 +4,11 @@ from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from ..services.invoice_service import InvoiceService
-from ..models.user_model import User
-from ..schemas.invoice_schema import (
-    Invoice,
-    InvoiceCreate,
-    InvoiceUpdate
-)
+from ..entities.user import User
+from ..entities.invoice import Invoice
+from ..schemas.request.invoice import InvoiceCreate, InvoiceUpdate
+from ..schemas.response.invoice import InvoiceResponse
+from ..schemas.dto.invoice_dto import InvoiceDTO
 
 class InvoiceController:
     """
@@ -21,7 +20,7 @@ class InvoiceController:
         """Initialize controller with database session."""
         self.invoice_service = InvoiceService(db)
 
-    def _check_invoice_access(self, invoice: Invoice, current_user: User):
+    def _check_invoice_access(self, invoice_dto: InvoiceDTO, current_user: User):
         """
         Check if user has access to invoice.
         
@@ -32,7 +31,7 @@ class InvoiceController:
         Raises:
             HTTPException: If access is denied
         """
-        if current_user.role.name == "client" and invoice.client_id != current_user.client_id:
+        if current_user.role.name == "client" and invoice_dto.client_id != current_user.client_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
@@ -40,11 +39,11 @@ class InvoiceController:
                     "title": "Access denied",
                     "status": 403,
                     "detail": "You can only access your own invoices",
-                    "instance": f"/invoices/{invoice.id}"
+                    "instance": f"/invoices/{invoice_dto.id}"
                 }
             )
 
-    async def create_invoice(self, invoice_data: InvoiceCreate, current_user: User) -> Invoice:
+    async def create_invoice(self, invoice_data: InvoiceCreate, current_user: User) -> InvoiceResponse:
         """
         Create a new invoice.
         
@@ -59,21 +58,33 @@ class InvoiceController:
             HTTPException: If creation fails or permissions not met
         """
         try:
-            # For client role, ensure they can only create invoices for themselves
-            if current_user.role.name == "client":
-                if str(invoice_data.client_id) != str(current_user.client_id):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "type": "about:blank",
-                            "title": "Access denied",
-                            "status": 403,
-                            "detail": "You can only create invoices for your own account",
-                            "instance": "/invoices"
-                        }
-                    )
+            # Convert Request to DTO
+            invoice_dto = InvoiceDTO(
+                id=None,
+                client_id=invoice_data.client_id,
+                invoice_date=invoice_data.invoice_date,
+                due_date=invoice_data.due_date,
+                amount_due=invoice_data.amount_due,
+                amount_paid=invoice_data.amount_paid or 0,
+                created_by=current_user.id,
+                status=None
+            )
             
-            return self.invoice_service.create_invoice(invoice_data, current_user)
+            # Send DTO to service, get DTO back
+            result_dto = await self.invoice_service.create_invoice(invoice_dto, current_user)
+
+            # Convert DTO to Response
+            return InvoiceResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                invoice_date=result_dto.invoice_date,
+                due_date=result_dto.due_date,
+                amount_due=result_dto.amount_due,
+                amount_paid=result_dto.amount_paid,
+                status=result_dto.status,
+                created_by=result_dto.created_by
+            )
+            
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -86,7 +97,7 @@ class InvoiceController:
                 }
             )
 
-    async def get_invoice(self, invoice_id: UUID, current_user: User) -> Invoice:
+    async def get_invoice(self, invoice_id: UUID, current_user: User) -> InvoiceResponse:
         """
         Get a specific invoice by ID.
         
@@ -101,9 +112,22 @@ class InvoiceController:
             HTTPException: If invoice not found or access denied
         """
         try:
-            invoice = self.invoice_service.get_invoice(invoice_id)
-            self._check_invoice_access(invoice, current_user)
-            return invoice
+            result_dto = await self.invoice_service.get_invoice(invoice_id)
+            
+            # Access control
+            self._check_invoice_access(result_dto, current_user)
+                
+             # Convert DTO to Response
+            return InvoiceResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                invoice_date=result_dto.invoice_date,
+                due_date=result_dto.due_date,
+                amount_due=result_dto.amount_due,
+                amount_paid=result_dto.amount_paid,
+                status=result_dto.status,
+                created_by=result_dto.created_by
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -124,7 +148,7 @@ class InvoiceController:
                           min_amount: Optional[float] = None,
                           max_amount: Optional[float] = None,
                           is_overdue: Optional[bool] = None,
-                          current_user: User = None) -> List[Invoice]:
+                          current_user: User = None) -> List[InvoiceResponse]:
         """
         Search invoices with filters.
         
@@ -149,7 +173,7 @@ class InvoiceController:
             if current_user.role.name == "client":
                 client_id = current_user.client_id
 
-            return self.invoice_service.search_invoices(
+            result_dtos = await self.invoice_service.search_invoices(
                 client_id=client_id,
                 status=status,
                 start_date=start_date,
@@ -158,6 +182,21 @@ class InvoiceController:
                 max_amount=max_amount,
                 is_overdue=is_overdue
             )
+            # Convert DTOs to Responses
+            return [
+                InvoiceResponse(
+                    id=dto.id,
+                    client_id=dto.client_id,
+                    invoice_date=dto.invoice_date,
+                    due_date=dto.due_date,
+                    amount_due=dto.amount_due,
+                    amount_paid=dto.amount_paid,
+                    status=dto.status,
+                    created_by=dto.created_by
+                )
+                for dto in result_dtos
+            ]
+
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -173,7 +212,7 @@ class InvoiceController:
     async def update_invoice(self,
                          invoice_id: UUID,
                          invoice_data: InvoiceUpdate,
-                         current_user: User) -> Invoice:
+                         current_user: User) -> InvoiceResponse:
         """
         Update an existing invoice.
         
@@ -189,11 +228,32 @@ class InvoiceController:
             HTTPException: If update fails or access denied
         """
         try:
-            # First get the invoice to check access
-            invoice = self.invoice_service.get_invoice(invoice_id)
-            self._check_invoice_access(invoice, current_user)
-            
-            return self.invoice_service.update_invoice(invoice_id, invoice_data, current_user)
+            # Convert Request to DTO
+            update_dto = InvoiceDTO(
+                id=invoice_id,
+                client_id=None,  # Can't update client_id
+                invoice_date=invoice_data.invoice_date,
+                due_date=invoice_data.due_date,
+                amount_due=invoice_data.amount_due,
+                amount_paid=invoice_data.amount_paid,
+                status=None,  # Will be calculated by service
+                created_by=None  # Can't update created_by
+            )
+
+            # Send DTO to service, get DTO back
+            result_dto = await self.invoice_service.update_invoice(update_dto, current_user)
+
+            # Convert DTO to Response
+            return InvoiceResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                invoice_date=result_dto.invoice_date,
+                due_date=result_dto.due_date,
+                amount_due=result_dto.amount_due,
+                amount_paid=result_dto.amount_paid,
+                status=result_dto.status,
+                created_by=result_dto.created_by
+            )
         except ValueError as e:
             if "not found" in str(e):
                 raise HTTPException(
@@ -217,7 +277,7 @@ class InvoiceController:
                 }
             )
 
-    async def delete_invoice(self, invoice_id: UUID, current_user: User) -> bool:
+    async def delete_invoice(self, invoice_id: UUID, current_user: User) -> None:
         """
         Delete an invoice.
         
@@ -232,11 +292,8 @@ class InvoiceController:
             HTTPException: If deletion fails or access denied
         """
         try:
-            # First get the invoice to check access
-            invoice = self.invoice_service.get_invoice(invoice_id)
-            self._check_invoice_access(invoice, current_user)
-            
-            return self.invoice_service.delete_invoice(invoice_id, current_user)
+            # Simply pass ID to service
+            await self.invoice_service.delete_invoice(invoice_id, current_user)
         except ValueError as e:
             if "not found" in str(e):
                 raise HTTPException(
@@ -260,7 +317,7 @@ class InvoiceController:
                 }
             )
 
-    async def get_overdue_invoices(self, current_user: User) -> List[Invoice]:
+    async def get_overdue_invoices(self, current_user: User) -> List[InvoiceResponse]:
         """
         Get all overdue invoices.
         
@@ -270,4 +327,27 @@ class InvoiceController:
         Returns:
             List[Invoice]: List of overdue invoices
         """
-        return self.invoice_service.get_overdue_invoices(current_user)
+        try:
+            # Pass client_id if it's a client user
+            client_id = current_user.client_id if current_user.role.name == "client" else None
+            
+            # Get DTOs from service
+            result_dtos = await self.invoice_service.get_overdue_invoices(client_id)
+
+            # Convert DTOs to Responses
+            return [
+                InvoiceResponse(
+                    id=dto.id,
+                    client_id=dto.client_id,
+                    invoice_date=dto.invoice_date,
+                    due_date=dto.due_date,
+                    amount_due=dto.amount_due,
+                    amount_paid=dto.amount_paid,
+                    status=dto.status,
+                    created_by=dto.created_by
+                )
+                for dto in result_dtos
+            ]
+
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))

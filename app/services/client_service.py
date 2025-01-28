@@ -1,12 +1,12 @@
 from typing import List
 from uuid import UUID
-from sqlalchemy.orm import Session
-from ..models.client_model import Client
-from ..models.user_model import User
-from ..repositories.client_repository import ClientRepository
-from ..schemas.client_schema import ClientCreate, ClientUpdate
-from ..models.audit_logs_model import AuditLog
 from datetime import datetime, UTC
+from sqlalchemy.orm import Session
+from ..repositories.client_repository import ClientRepository
+from .audit_log_service import AuditService
+from ..schemas.dto.client_dto import ClientDTO
+from ..entities.user import User
+from ..entities.client import Client
 
 class ClientService:
     """
@@ -21,31 +21,10 @@ class ClientService:
         Args:
             db: Database session
         """
-        self.client_repository = ClientRepository(Client, db)
-        self.db = db
+        self.client_repository = ClientRepository(db)
+        self.audit_service = AuditService(db)  
 
-    def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-        """
-        Create an audit log entry.
-        
-        Args:
-            user_id: ID of user making the change
-            record_id: ID of affected record
-            change_type: Type of change (create, update, delete)
-            details: Change details
-        """
-        audit_log = AuditLog(
-            changed_by=user_id,
-            table_name="clients",
-            record_id=record_id,
-            change_type=change_type,
-            change_details=details,
-            timestamp=datetime.now(UTC)
-        )
-        self.db.add(audit_log)
-        self.db.commit()
-
-    def create_client(self, client_data: ClientCreate, created_by: User) -> Client:
+    async def create_client(self, client_dto: ClientDTO, created_by: User) -> ClientDTO:
         """
         Create a new client.
         
@@ -59,25 +38,46 @@ class ClientService:
         Raises:
             ValueError: If client with same name exists
         """
-        # Business validation
-        existing_client = self.client_repository.get_client_by_name(client_data.name)
-        if existing_client:
-            raise ValueError(f"Client with name '{client_data.name}' already exists")
-            
-        # Create client
-        client = self.client_repository.create(client_data)
-        
-        # Audit logging
-        self._create_audit_log(
-            user_id=created_by.id,
-            record_id=client.id,
-            change_type="create",
-            details=f"Created client {client.name}"
-        )
-        
-        return client
+        try:
+            # Business validation
+            existing_name = await self.client_repository.get_client_by_name(client_dto.name)
+            if existing_name:
+                raise ValueError(f"Client with name '{client_dto.name}' already exists")
+            existing_email = await self.client_repository.get_client_by_email(client_dto.contact_email)
+            if existing_email:
+                raise ValueError(f"Client with email '{client_dto.contact_email}' already exists")
+                
+            # Convert DTO to entity
+            client = Client(
+                id = None,
+                name=client_dto.name,
+                industry=client_dto.industry,
+                contact_email=client_dto.contact_email,
+                contact_phone=client_dto.contact_phone,
+                address=client_dto.address,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC)
+            )
 
-    def get_client(self, client_id: UUID, _current_user: User = None) -> Client:
+            # Save through repository
+            saved_client = await self.client_repository.create(client)
+
+            # Create Log
+            await self.audit_service.log_change(
+                user_id=created_by.id,
+                record_id=saved_client.id,
+                table_name="clients",
+                change_type="CREATE",
+                details=f"Created client {saved_client.name}"
+            )
+
+            # Convert entity to DTO and return
+            return ClientDTO.from_entity(saved_client)
+
+        except Exception as e:
+            raise ValueError(f"Error creating invoice: {str(e)}")
+
+    async def get_client(self, client_id: UUID) -> ClientDTO:
         """
         Get a client by ID.
         
@@ -86,18 +86,18 @@ class ClientService:
             _current_user: User requesting the client (unused, kept for interface consistency)
             
         Returns:
-            Client: Found client
+            ClientDTO: Found client
             
         Raises:
             ValueError: If client not found
         """
-        client = self.client_repository.get(client_id)
+        client = await self.client_repository.get_by_id(client_id)
         if not client:
             raise ValueError(f"Client with id '{client_id}' not found")
             
-        return client
+        return ClientDTO.from_entity(client)
 
-    def get_all_clients(self, skip: int = 0, limit: int = 100) -> List[Client]:
+    async def get_all_clients(self, skip: int = 0, limit: int = 100) -> List[ClientDTO]:
         """
         Get all clients with pagination.
         
@@ -108,9 +108,13 @@ class ClientService:
         Returns:
             List[Client]: List of clients
         """
-        return self.client_repository.get_all(skip=skip, limit=limit)
+        clients = await self.client_repository.get_all(skip=skip, limit=limit)
+        return [
+            ClientDTO.from_entity(client)
+            for client in clients
+        ]
 
-    def update_client(self, client_id: UUID, client_data: ClientUpdate, updated_by: User) -> Client:
+    async def update_client(self, client_data: ClientDTO, updated_by: User) -> ClientDTO:
         """
         Update a client.
         
@@ -120,34 +124,56 @@ class ClientService:
             updated_by: User performing the update
             
         Returns:
-            Client: Updated client
+            ClientDTO: Updated client
             
         Raises:
             ValueError: If client not found or name conflict exists
         """
-        # Check if client exists
-        client = self.get_client(client_id)
+        try:
+            # Get existing client
+            existing_client = await self.client_repository.get_by_id(client_data.id)
+            if not existing_client:
+                raise ValueError(f"Client with id '{client_data.id}' not found")
         
-        # Business validation for name changes
-        if client_data.name and client_data.name != client.name:
-            existing_client = self.client_repository.get_client_by_name(client_data.name)
-            if existing_client:
-                raise ValueError(f"Client with name '{client_data.name}' already exists")
-        
-        # Update client
-        updated_client = self.client_repository.update(client_id, client_data)
-        
-        # Audit logging
-        self._create_audit_log(
-            user_id=updated_by.id,
-            record_id=client_id,
-            change_type="update",
-            details=f"Updated client {client.name}"
-        )
-        
-        return updated_client
+            # Business validation for name changes
+            if client_data.name and client_data.name != existing_client.name:
+                same_name = await self.client_repository.get_client_by_name(client_data.name)
+                if same_name:
+                    raise ValueError(f"Client with name '{client_data.name}' already exists")
+            
+            # Update fields while preserving others
+            if client_data.name:
+                existing_client.name = client_data.name
+            if client_data.industry:
+                existing_client.industry = client_data.industry
+            if client_data.address:
+                existing_client.address = client_data.address
+            if client_data.contact_email:
+                existing_client.contact_email = client_data.contact_email
+            if client_data.contact_phone:
+                existing_client.contact_phone = client_data.contact_phone
+            
+            existing_client.updated_at = datetime.now(UTC)
 
-    def delete_client(self, client_id: UUID, deleted_by: User) -> bool:
+            # Save updates
+            updated_client = await self.client_repository.update(existing_client)
+
+            # Create Log
+            await self.audit_service.log_change(
+                user_id=updated_by.id,
+                record_id=updated_client.id,
+                table_name="clients",
+                change_type="UPDATE",
+                details=f"Updated client {updated_client.name}"
+            )
+
+            # Convert entity to DTO and return
+            return ClientDTO.from_entity(updated_client)
+        
+        except Exception as e:
+            raise ValueError(f"Error updating client: {str(e)}")
+
+    async def delete_client(self, client_id: UUID, deleted_by: User) -> None:
         """
         Delete a client.
         
@@ -156,29 +182,28 @@ class ClientService:
             deleted_by: User performing the deletion
             
         Returns:
-            bool: True if deleted, False if not found
+            None
             
         Raises:
             ValueError: If client has active transactions or invoices
         """
         # Check if client exists
-        client = self.get_client(client_id)
+        client = await self.client_repository.get_by_id(client_id)
+        if not client:
+            raise ValueError(f"Client {client_id} not found")
         
-        # Perform deletion
-        result = self.client_repository.delete(client_id)
+        await self.client_repository.delete(client_id)
         
-        if result:
-            # Audit logging
-            self._create_audit_log(
-                user_id=deleted_by.id,
-                record_id=client_id,
-                change_type="delete",
-                details=f"Deleted client {client.name}"
-            )
-            
-        return result
+        # Create Log
+        await self.audit_service.log_change(
+            user_id=deleted_by.id,
+            record_id=client_id,
+            table_name="clients",
+            change_type="DELETE",
+            details=f"Deleted client {client.name}"
+        )
 
-    def search_clients(self, search_term: str) -> List[Client]:
+    async def search_clients(self, search_term: str) -> List[ClientDTO]:
         """
         Search clients by name or industry.
         
@@ -186,6 +211,7 @@ class ClientService:
             search_term: Term to search for
             
         Returns:
-            List[Client]: List of matching clients
+            List[ClientDTO]: List of matching clients
         """
-        return self.client_repository.search_clients(search_term)
+        clients = await self.client_repository.search_clients(search_term)
+        return [ClientDTO.from_entity(client) for client in clients]

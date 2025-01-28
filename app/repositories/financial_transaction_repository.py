@@ -1,24 +1,64 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from datetime import date
-from ..models.financial_transaction_model import FinancialTransaction
-from ..schemas.financial_transaction_schema import FinancialTransactionCreate, FinancialTransactionUpdate
-from .base_repository import BaseRepository
+from ..models.financial_transaction_model import FinancialTransaction as FinancialTransactionModel
+from ..entities.financial_transaction import FinancialTransaction
 
-class FinancialTransactionRepository(BaseRepository[FinancialTransaction, FinancialTransactionCreate, FinancialTransactionUpdate]):
+class FinancialTransactionRepository:
     """Repository for handling financial transaction database operations.
-
-    This repository extends the BaseRepository to provide specific operations for
-    financial transactions, including searching, filtering, and client-specific queries.
-
-    Attributes:
-        model: The SQLAlchemy model class for financial transactions
-        db: SQLAlchemy database session
     """
     
-    def get_by_client_id(self, client_id: UUID, skip: int = 0, limit: int = 100) -> List[FinancialTransaction]:
+    def __init__(self, db: Session):
+        """Initialize repository with database session."""
+        self.db = db
+
+    def _to_model(self, entity: FinancialTransaction) -> FinancialTransactionModel:
+        """Convert entity to model."""
+        return FinancialTransactionModel(
+            id=entity.id,
+            client_id=entity.client_id,
+            created_by=entity.created_by,
+            transaction_date=entity.transaction_date,
+            amount=entity.amount,
+            description=entity.description,
+            category=entity.category,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at
+        )
+    
+    def _to_entity(self, model:FinancialTransactionModel) -> FinancialTransaction:
+        """Convert model to entity."""
+        return FinancialTransaction(
+            id=model.id,
+            client_id=model.client_id,
+            created_by=model.created_by,
+            transaction_date=model.transaction_date,
+            amount=model.amount,
+            description=model.description,
+            category=model.category,
+            created_at=model.created_at,
+            updated_at=model.updated_at
+        )
+    
+    async def create(self, entity: FinancialTransaction) -> FinancialTransaction:
+        """Create a new financial transaction in the database."""
+        try:
+            model = self._to_model(entity)
+            self.db.add(model)
+            self.db.commit()
+            self.db.refresh(model)
+            return self._to_entity(model)
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error creating financial transaction: {str(e)}")
+        
+    async def get_by_id(self, id: UUID) -> Optional[FinancialTransaction]:
+        """Get a financial transaction by ID."""
+        model = self.db.query(FinancialTransactionModel).filter(FinancialTransactionModel.id == id).first()
+        return self._to_entity(model) if model else None
+    
+    async def get_by_client_id(self, client_id: UUID, skip: int = 0, limit: int = 100) -> List[FinancialTransaction]:
         """Retrieve all financial transactions for a specific client.
 
         Args:
@@ -29,13 +69,14 @@ class FinancialTransactionRepository(BaseRepository[FinancialTransaction, Financ
         Returns:
             List[FinancialTransaction]: List of financial transactions for the specified client
         """
-        return self.db.query(self.model)\
-            .filter(self.model.client_id == client_id)\
+        models = self.db.query(FinancialTransactionModel)\
+            .filter(FinancialTransactionModel.client_id == client_id)\
             .offset(skip)\
             .limit(limit)\
             .all()
+        return [self._to_entity(model) for model in models]
 
-    def search_transactions(self, 
+    async def search_transactions(self, 
                         client_id: Optional[UUID] = None,
                         category: Optional[str] = None,
                         start_date: Optional[date] = None,
@@ -55,29 +96,30 @@ class FinancialTransactionRepository(BaseRepository[FinancialTransaction, Financ
         Returns:
             List[FinancialTransaction]: List of transactions matching the specified criteria
         """
-        query = self.db.query(self.model)
+        query = self.db.query(FinancialTransactionModel)
         
         if client_id:
-            query = query.filter(self.model.client_id == client_id)
+            query = query.filter(FinancialTransactionModel.client_id == client_id)
             
         if category:
-            query = query.filter(self.model.category == category)
+            query = query.filter(FinancialTransactionModel.category == category)
             
         if start_date:
-            query = query.filter(self.model.transaction_date >= start_date)
+            query = query.filter(FinancialTransactionModel.transaction_date >= start_date)
             
         if end_date:
-            query = query.filter(self.model.transaction_date <= end_date)
+            query = query.filter(FinancialTransactionModel.transaction_date <= end_date)
             
         if min_amount is not None:
-            query = query.filter(self.model.amount >= min_amount)
+            query = query.filter(FinancialTransactionModel.amount >= min_amount)
             
         if max_amount is not None:
-            query = query.filter(self.model.amount <= max_amount)
+            query = query.filter(FinancialTransactionModel.amount <= max_amount)
             
-        return query.all()
+        models = query.all()
+        return [self._to_entity(model) for model in models]
 
-    def get_transactions_by_date_range(self, start_date: date, end_date: date) -> List[FinancialTransaction]:
+    async def get_transactions_by_date_range(self, start_date: date, end_date: date) -> List[FinancialTransaction]:
         """Retrieve transactions within a specific date range.
 
         Args:
@@ -87,11 +129,12 @@ class FinancialTransactionRepository(BaseRepository[FinancialTransaction, Financ
         Returns:
             List[FinancialTransaction]: List of transactions within the specified date range
         """
-        return self.db.query(self.model)\
-            .filter(self.model.transaction_date.between(start_date, end_date))\
+        models = self.db.query(FinancialTransactionModel)\
+            .filter(FinancialTransactionModel.transaction_date.between(start_date, end_date))\
             .all()
+        return [self._to_entity(model) for model in models]
 
-    def get_transactions_by_category(self, category: str) -> List[FinancialTransaction]:
+    async def get_transactions_by_category(self, category: str) -> List[FinancialTransaction]:
         """Retrieve all transactions of a specific category.
 
         Args:
@@ -100,6 +143,32 @@ class FinancialTransactionRepository(BaseRepository[FinancialTransaction, Financ
         Returns:
             List[FinancialTransaction]: List of transactions in the specified category
         """
-        return self.db.query(self.model)\
-            .filter(self.model.category == category)\
+        models = self.db.query(FinancialTransactionModel)\
+            .filter(FinancialTransactionModel.category == category)\
             .all()
+        return [self._to_entity(model) for model in models]
+    
+    async def update(self, entity: FinancialTransaction) -> FinancialTransaction:
+        """Update an existing financial transaction."""
+        try:
+            model = self._to_model(entity)
+            self.db.merge(model)
+            self.db.commit()
+            
+            # Refresh and return updated entity
+            updated_model = self.db.query(FinancialTransactionModel).filter(FinancialTransactionModel.id == entity.id).first()
+            return self._to_entity(updated_model)
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error updating financial transaction: {str(e)}")
+
+    async def delete(self, id: UUID) -> None:
+        """Delete a financial transaction."""
+        try:
+            model = self.db.query(FinancialTransactionModel).filter(FinancialTransactionModel.id == id).first()
+            if model:
+                self.db.delete(model)
+                self.db.commit()
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Error deleting financial transaction: {str(e)}")

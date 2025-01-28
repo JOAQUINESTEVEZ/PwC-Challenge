@@ -4,8 +4,11 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any
 
 from ..services.auth_service import AuthService
-from ..schemas.auth_schema import LoginResponse
-from ..schemas.signup_schema import SignupRequest
+from ..schemas.request.login import LoginRequest
+from ..schemas.request.signup import SignupRequest
+from ..schemas.response.login import LoginResponse
+from ..schemas.dto.user_dto import UserDTO
+from ..schemas.dto.client_dto import ClientDTO
 from ..dependencies.auth import get_current_user
 
 class AuthController:
@@ -35,7 +38,7 @@ class AuthController:
         Raises:
             HTTPException: If authentication fails
         """
-        result = self.auth_service.authenticate_user(
+        result = await self.auth_service.authenticate_user(
             username=form_data.username,
             password=form_data.password
         )
@@ -56,7 +59,38 @@ class AuthController:
     
     async def signup(self, signup_data: SignupRequest) -> LoginResponse:
         """Handle client signup process."""
-        return self.auth_service.signup_client(signup_data)
+        try:
+            # Convert Request to DTO
+            client_dto = ClientDTO(
+                id=None,
+                name=signup_data.company_name,
+                industry=signup_data.industry,
+                contact_email=signup_data.contact_email,
+                contact_phone=signup_data.contact_phone,
+                address=signup_data.address
+            )
+            user_dto = UserDTO(
+                id=None,
+                username=signup_data.username,
+                email=signup_data.email,
+                password_hash=signup_data.password, # will hash password in service
+                role_id=None,
+                client_id=None,
+            )
+
+            return await self.auth_service.signup_client(client_dto, user_dto)
+        
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "type": "about:blank",
+                    "title": "Invalid transaction data",
+                    "status": 400,
+                    "detail": str(e),
+                    "instance": "/finance/transactions"
+                }
+            )
 
     async def get_current_user_info(self, current_user: dict) -> Dict[str, Any]:
         """
