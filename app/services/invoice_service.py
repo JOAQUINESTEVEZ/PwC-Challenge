@@ -4,8 +4,10 @@ from datetime import date, datetime, UTC
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from ..repositories.invoice_repository import InvoiceRepository
+from ..repositories.audit_log_repository import AuditLogRepository
 from ..entities.user import User
 from ..entities.invoice import Invoice, InvoiceStatus
+from ..entities.audit_log import AuditLog
 from ..schemas.dto.invoice_dto import InvoiceDTO
 
 class InvoiceService:
@@ -17,29 +19,31 @@ class InvoiceService:
     def __init__(self, db: Session):
         """Initialize service with database session."""
         self.invoice_repository = InvoiceRepository(db)
+        self.audit_log_repository = AuditLogRepository(db)
 
-    # def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-    #     """
-    #     Create an audit log entry for invoice changes.
+    async def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
+        """
+        Create an audit log entry.
         
-    #     Args:
-    #         user_id: ID of user making the change
-    #         record_id: ID of affected invoice
-    #         change_type: Type of change (create, update, delete)
-    #         details: Change details
-    #     """
-    #     audit_log = AuditLog(
-    #         changed_by=user_id,
-    #         table_name="invoices",
-    #         record_id=record_id,
-    #         change_type=change_type,
-    #         change_details=details,
-    #         timestamp=datetime.now(UTC)
-    #     )
-    #     self.db.add(audit_log)
-    #     self.db.commit()
+        Args:
+            user_id: ID of user making the change
+            record_id: ID of affected record
+            change_type: Type of change (create, update, delete)
+            details: Change details
+        """
+        audit_log = AuditLog(
+            id=None,
+            changed_by=user_id,
+            table_name="invoices",
+            record_id=record_id,
+            change_type=change_type,
+            change_details=details,
+            timestamp=datetime.now(UTC)
+        )
 
-    async def create_invoice(self, invoice_dto: InvoiceDTO) -> InvoiceDTO:
+        await self.audit_log_repository.create(audit_log)
+
+    async def create_invoice(self, invoice_dto: InvoiceDTO, current_user: User) -> InvoiceDTO:
         """
         Create a new invoice.
         
@@ -75,21 +79,19 @@ class InvoiceService:
             # Save through repository
             saved_invoice = await self.invoice_repository.create(invoice)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=current_user.id,
+                record_id=saved_invoice.id,
+                change_type="CREATE",
+                details=f"Created invoice for client {saved_invoice.client_id}"
+            )
+
             # Convert entity to DTO and return
             return InvoiceDTO.from_entity(saved_invoice)
         
         except Exception as e:
             raise ValueError(f"Error creating invoice: {str(e)}")
-        
-        # # Create audit log
-        # self._create_audit_log(
-        #     user_id=current_user.id,
-        #     record_id=invoice.id,
-        #     change_type="create",
-        #     details=f"Created invoice of {invoice.amount_due} for client {invoice.client_id}"
-        # )
-        
-        # return invoice
 
     async def get_invoice(self, invoice_id: UUID) -> InvoiceDTO:
         """
@@ -205,19 +207,19 @@ class InvoiceService:
             # Save updates
             updated_invoice = await self.invoice_repository.update(existing_invoice)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=current_user.id,
+                record_id=updated_invoice.id,
+                change_type="UPDATE",
+                details=f"Updated invoice {updated_invoice.id}"
+            )
+
             # Convert entity to DTO and return
             return InvoiceDTO.from_entity(updated_invoice)
 
         except Exception as e:
             raise ValueError(f"Error updating invoice: {str(e)}")
-        
-        # # Create audit log
-        # self._create_audit_log(
-        #     user_id=current_user.id,
-        #     record_id=invoice_id,
-        #     change_type="update",
-        #     details=f"Updated invoice {invoice_id}"
-        # )
 
     async def delete_invoice(self, invoice_id: UUID, current_user: User) -> None:
         """
@@ -241,6 +243,14 @@ class InvoiceService:
             raise ValueError("Cannot delete a paid invoice")
 
         await self.invoice_repository.delete(invoice_id)
+
+        # Create Log
+        await self._create_audit_log(
+            user_id=current_user.id,
+            record_id=invoice_id,
+            change_type="DELETE",
+            details=f"Deleted invoice {invoice_id}"
+        )
 
     async def get_overdue_invoices(self, client_id: Optional[UUID] = None) -> List[InvoiceDTO]:
         """

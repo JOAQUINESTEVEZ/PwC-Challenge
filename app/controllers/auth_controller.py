@@ -7,7 +7,6 @@ from ..services.auth_service import AuthService
 from ..schemas.request.login import LoginRequest
 from ..schemas.request.signup import SignupRequest
 from ..schemas.response.login import LoginResponse
-from ..entities.user import User
 from ..schemas.dto.user_dto import UserDTO
 from ..schemas.dto.client_dto import ClientDTO
 from ..dependencies.auth import get_current_user

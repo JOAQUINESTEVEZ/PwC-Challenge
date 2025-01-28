@@ -2,7 +2,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from ..services.report_service import ReportService
-from ..entities.financial_transaction import FinancialTransaction
 from ..entities.user import User
 
 from io import BytesIO

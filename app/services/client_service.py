@@ -3,9 +3,11 @@ from uuid import UUID
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from ..repositories.client_repository import ClientRepository
+from ..repositories.audit_log_repository import AuditLogRepository
 from ..schemas.dto.client_dto import ClientDTO
 from ..entities.user import User
 from ..entities.client import Client
+from ..entities.audit_log import AuditLog
 
 class ClientService:
     """
@@ -21,27 +23,30 @@ class ClientService:
             db: Database session
         """
         self.client_repository = ClientRepository(db)
+        self.audit_log_repository = AuditLogRepository(db)
 
-    # def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-    #     """
-    #     Create an audit log entry.
+    async def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
+        """
+        Create an audit log entry.
         
-    #     Args:
-    #         user_id: ID of user making the change
-    #         record_id: ID of affected record
-    #         change_type: Type of change (create, update, delete)
-    #         details: Change details
-    #     """
-    #     audit_log = AuditLog(
-    #         changed_by=user_id,
-    #         table_name="clients",
-    #         record_id=record_id,
-    #         change_type=change_type,
-    #         change_details=details,
-    #         timestamp=datetime.now(UTC)
-    #     )
-    #     self.db.add(audit_log)
-    #     self.db.commit()
+        Args:
+            user_id: ID of user making the change
+            record_id: ID of affected record
+            change_type: Type of change (create, update, delete)
+            details: Change details
+        """
+        audit_log = AuditLog(
+            id=None,
+            changed_by=user_id,
+            table_name="clients",
+            record_id=record_id,
+            change_type=change_type,
+            change_details=details,
+            timestamp=datetime.now(UTC)
+        )
+
+        await self.audit_log_repository.create(audit_log)
+        
 
     async def create_client(self, client_dto: ClientDTO, created_by: User) -> ClientDTO:
         """
@@ -81,16 +86,16 @@ class ClientService:
             # Save through repository
             saved_client = await self.client_repository.create(client)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=created_by.id,
+                record_id=saved_client.id,
+                change_type="CREATE",
+                details=f"Created client {saved_client.name}"
+            )
+
             # Convert entity to DTO and return
             return ClientDTO.from_entity(saved_client)
-            
-            # Audit logging
-            # self._create_audit_log(
-            #     user_id=created_by.id,
-            #     record_id=client.id,
-            #     change_type="create",
-            #     details=f"Created client {client.name}"
-            # )
 
         except Exception as e:
             raise ValueError(f"Error creating invoice: {str(e)}")
@@ -176,19 +181,19 @@ class ClientService:
             # Save updates
             updated_client = await self.client_repository.update(existing_client)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=updated_by.id,
+                record_id=updated_client.id,
+                change_type="UPDATE",
+                details=f"Updated client {updated_client.name}"
+            )
+
             # Convert entity to DTO and return
             return ClientDTO.from_entity(updated_client)
         
         except Exception as e:
             raise ValueError(f"Error updating client: {str(e)}")
-        
-        # Audit logging
-        # self._create_audit_log(
-        #     user_id=updated_by.id,
-        #     record_id=client_id,
-        #     change_type="update",
-        #     details=f"Updated client {client.name}"
-        # )
 
     async def delete_client(self, client_id: UUID, deleted_by: User) -> None:
         """
@@ -211,14 +216,13 @@ class ClientService:
         
         await self.client_repository.delete(client_id)
         
-        
-        # Audit logging
-        # self._create_audit_log(
-        #     user_id=deleted_by.id,
-        #     record_id=client_id,
-        #     change_type="delete",
-        #     details=f"Deleted client {client.name}"
-        # )
+        # Create Log
+        await self._create_audit_log(
+            user_id=deleted_by.id,
+            record_id=client.id,
+            change_type="DELETE",
+            details=f"Deleted client {client.name}"
+        )
 
     async def search_clients(self, search_term: str) -> List[ClientDTO]:
         """

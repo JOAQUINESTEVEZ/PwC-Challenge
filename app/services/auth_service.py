@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from ..repositories.user_repository import UserRepository
 from ..repositories.client_repository import ClientRepository
+from ..repositories.audit_log_repository import AuditLogRepository
 from ..entities.user import User
 from ..entities.client import Client
+from ..entities.audit_log import AuditLog
 from ..schemas.response.login import LoginResponse
 from ..schemas.dto.client_dto import ClientDTO
 from ..schemas.dto.user_dto import UserDTO
@@ -18,6 +20,7 @@ class AuthService:
     def __init__(self, db: Session):
         self.user_repository = UserRepository(db)
         self.client_repository = ClientRepository(db)
+        self.audit_log_repository = AuditLogRepository(db)
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return pwd_context.verify(plain_password, hashed_password)
@@ -123,6 +126,31 @@ class AuthService:
             }
             
             access_token = create_access_token(token_data)
+
+            # Log client created
+            client_log = AuditLog(
+                id=None,
+                changed_by=None,
+                table_name="clients",
+                record_id=saved_client_entity.id,
+                change_type="CREATE",
+                change_details=f"Created client {saved_client_entity.name}",
+                timestamp=None
+            )
+            # Log user created
+            user_log = AuditLog(
+                id=None,
+                changed_by=None,
+                table_name="users",
+                record_id=saved_user_entity.id,
+                change_type="CREATE",
+                change_details=f"Created user {saved_user_entity.username}",
+                timestamp=None
+            )
+            # Send to Repository
+            await self.audit_log_repository.create(client_log)
+            await self.audit_log_repository.create(user_log)
+
             return LoginResponse(access_token=access_token, token_type="bearer")
 
         except Exception as e:

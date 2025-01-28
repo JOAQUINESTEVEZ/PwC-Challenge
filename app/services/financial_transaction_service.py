@@ -4,9 +4,10 @@ from datetime import date, datetime, UTC
 from sqlalchemy.orm import Session
 from ..entities.user import User
 from ..entities.financial_transaction import FinancialTransaction
+from ..entities.audit_log import AuditLog
 from ..repositories.financial_transaction_repository import FinancialTransactionRepository
+from ..repositories.audit_log_repository import AuditLogRepository
 from ..schemas.dto.transaction_dto import TransactionDTO
-from ..models.audit_logs_model import AuditLog
 from decimal import Decimal
 
 class FinancialTransactionService:
@@ -23,27 +24,29 @@ class FinancialTransactionService:
             db: Database session
         """
         self.transaction_repository = FinancialTransactionRepository(db)
+        self.audit_log_repository = AuditLogRepository(db)
 
-    # def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
-    #     """
-    #     Create an audit log entry for transaction changes.
+    async def _create_audit_log(self, user_id: UUID, record_id: UUID, change_type: str, details: str) -> None:
+        """
+        Create an audit log entry.
         
-    #     Args:
-    #         user_id: ID of user making the change
-    #         record_id: ID of affected transaction
-    #         change_type: Type of change (create, update, delete)
-    #         details: Change details
-    #     """
-    #     audit_log = AuditLog(
-    #         changed_by=user_id,
-    #         table_name="financial_transactions",
-    #         record_id=record_id,
-    #         change_type=change_type,
-    #         change_details=details,
-    #         timestamp=datetime.now(UTC)
-    #     )
-    #     self.db.add(audit_log)
-    #     self.db.commit()
+        Args:
+            user_id: ID of user making the change
+            record_id: ID of affected record
+            change_type: Type of change (create, update, delete)
+            details: Change details
+        """
+        audit_log = AuditLog(
+            id=None,
+            changed_by=user_id,
+            table_name="financial_transactions",
+            record_id=record_id,
+            change_type=change_type,
+            change_details=details,
+            timestamp=datetime.now(UTC)
+        )
+
+        await self.audit_log_repository.create(audit_log)
 
     async def create_transaction(self, transaction_dto: TransactionDTO, current_user: User) -> TransactionDTO:
         """
@@ -73,21 +76,20 @@ class FinancialTransactionService:
             # Save through repository
             saved_transaction = await self.transaction_repository.create(transaction_entity)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=current_user.id,
+                record_id=saved_transaction.id,
+                change_type="CREATE",
+                details=f"Transaction created for client id {saved_transaction.client_id}"
+            )
+
             # Convert entity to DTO
             return TransactionDTO.from_entity(saved_transaction)
         
         except Exception as e:
             raise ValueError(f"Error creating transaction: {str(e)}")
         
-        # Create audit log
-        # self._create_audit_log(
-        #     user_id=current_user.id,
-        #     record_id=transaction.id,
-        #     change_type="create",
-        #     details=f"Created transaction of {transaction.amount} for client {transaction.client_id}"
-        # )
-        
-
     async def get_transaction(self, transaction_id: UUID) -> TransactionDTO:
         """
         Get transaction by ID.
@@ -198,19 +200,19 @@ class FinancialTransactionService:
             # Save updates
             updated_transaction = await self.transaction_repository.update(existing_transaction)
 
+            # Create Log
+            await self._create_audit_log(
+                user_id=current_user.id,
+                record_id=updated_transaction.id,
+                change_type="UPDATE",
+                details=f"Updated transaction {updated_transaction.id}"
+            )
+
             # Convert entity to DTO and return
             return TransactionDTO.from_entity(updated_transaction)
 
         except Exception as e:
             raise ValueError(f"Error updating transaction: {str(e)}")
-        
-        # Create audit log
-        # self._create_audit_log(
-        #     user_id=current_user.id,
-        #     record_id=transaction_id,
-        #     change_type="update",
-        #     details=f"Updated transaction {transaction_id}"
-        # )
 
     async def delete_transaction(self, transaction_id: UUID, current_user: User) -> None:
         """
@@ -226,3 +228,11 @@ class FinancialTransactionService:
             raise ValueError(f"Transaction with id {transaction_id} not found")
         
         await self.transaction_repository.delete(transaction_id)
+
+        # Create Log
+        await self._create_audit_log(
+            user_id=current_user.id,
+            record_id=transaction_id,
+            change_type="DELETE",
+            details=f"Deleted transaction {transaction_id}"
+        )

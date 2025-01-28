@@ -71,7 +71,7 @@ class InvoiceController:
             )
             
             # Send DTO to service, get DTO back
-            result_dto = await self.invoice_service.create_invoice(invoice_dto)
+            result_dto = await self.invoice_service.create_invoice(invoice_dto, current_user)
 
             # Convert DTO to Response
             return InvoiceResponse(
