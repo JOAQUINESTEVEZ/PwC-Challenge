@@ -72,12 +72,19 @@ class ReportService:
             client_id=client_id
         )
 
-    async def generate_client_financial_report(self, client_id: UUID) -> BytesIO:
+    async def generate_client_financial_report(
+            self,
+            client_id: UUID,
+            include_transactions: bool = True,
+            include_invoices: bool = True
+        ) -> BytesIO:
         """
         Generate a complete financial report for a client.
         
         Args:
             client_id: UUID of client
+            include_transactions: Whether to include transactions section
+            include_invoices: Whether to include invoices section
             
         Returns:
             BytesIO: PDF report buffer
@@ -89,15 +96,17 @@ class ReportService:
         client = await self._get_client_data(client_id)
         
         # Get transactions and invoices
-        transactions = await self._get_client_transactions(client_id)
-        invoices = await self._get_client_invoices(client_id)
+        if include_transactions:
+            transactions = await self._get_client_transactions(client_id)
+        if include_invoices:
+            invoices = await self._get_client_invoices(client_id)
         
         try:
             # Generate PDF using utility function
             return generate_financial_report(
                 client_name=client.name,
-                transactions=transactions,
-                invoices=invoices
+                transactions=transactions if include_transactions else None,
+                invoices=invoices if include_invoices else None
             )
         except Exception as e:
             raise ValueError(f"Failed to generate report: {str(e)}")

@@ -1,6 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.orm import Session
 from fastapi.responses import StreamingResponse
 from ..db import get_db
@@ -178,9 +178,23 @@ async def delete_client(
                Depends(check_user_pdf_rate_limit)
             ],
            responses={
-               401: {"description": "Not authenticated"},
-               403: {"description": "Not enough permissions"},
-               404: {"description": "Client not found"},
+                401: {"description": "Not authenticated"},
+                403: {"description": "Not enough permissions"},
+                404: {"description": "Client not found"},
+                400: {
+                   "description": "Bad Request",
+                   "content": {
+                       "application/json": {
+                           "example": {
+                               "type": "about:blank",
+                               "title": "Bad Request",
+                               "status": 400,
+                               "detail": "At least one section (transactions or invoices) must be included",
+                               "instance": "/clients/{client_id}/report"
+                           }
+                       }
+                   }
+               },
                429: {
                    "description": "Too Many Requests",
                    "content": {
@@ -199,6 +213,8 @@ async def delete_client(
            response_class=StreamingResponse)
 async def get_client_report(
     client_id: UUID,
+    include_transactions: bool = Query(True, description="Include transactions section in report"),
+    include_invoices: bool = Query(True, description="Include invoices section in report"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -207,6 +223,8 @@ async def get_client_report(
     
     Args:
         client_id: UUID of client
+        include_transactions: Whether to include transactions section
+        include_invoices: Whether to include invoices section
         current_user: Current authenticated user
         db: Database session
         
@@ -216,8 +234,24 @@ async def get_client_report(
     Raises:
         HTTPException: If client not found or access denied
     """
+    if not include_transactions and not include_invoices:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "At least one section (transactions or invoices) must be included",
+                "instance": f"/clients/{client_id}/report"
+            }
+        )
     report_controller = ReportController(db)
-    pdf_buffer = await report_controller.generate_client_financial_report(client_id, current_user)
+    pdf_buffer = await report_controller.generate_client_financial_report(
+        client_id,
+        current_user,
+        include_transactions=include_transactions,
+        include_invoices=include_invoices
+    )
     
     return StreamingResponse(
         pdf_buffer,

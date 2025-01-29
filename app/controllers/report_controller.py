@@ -46,13 +46,18 @@ class ReportController:
 
     async def generate_client_financial_report(self, 
                                           client_id: UUID, 
-                                          current_user: User) -> BytesIO:
+                                          current_user: User,
+                                          include_transactions: bool = True,
+                                          include_invoices: bool = True
+                                        ) -> BytesIO:
         """
         Generate a financial report for a client.
         
         Args:
             client_id: UUID of client
             current_user: Current authenticated user
+            include_transactions: Whether to include transactions section
+            include_invoices: Whether to include invoices section
             
         Returns:
             BytesIO: PDF report buffer
@@ -64,7 +69,11 @@ class ReportController:
         self._check_client_access(client_id, current_user)
         
         try:
-            return await self.report_service.generate_client_financial_report(client_id)
+            return await self.report_service.generate_client_financial_report(
+                client_id,
+                include_transactions=include_transactions,
+                include_invoices=include_invoices
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
