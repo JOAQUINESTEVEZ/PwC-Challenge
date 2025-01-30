@@ -1,28 +1,28 @@
 from typing import List
 from uuid import UUID
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-from ..services.client_service import ClientService
+
+from ..interfaces.controllers.client_controller import IClientController
+from ..interfaces.services.client_service import IClientService
 from ..schemas.request.client import ClientCreate, ClientUpdate
 from ..schemas.response.client import ClientResponse
 from ..schemas.dto.client_dto import ClientDTO
-from ..entities.client import Client
 from ..entities.user import User
 
-class ClientController:
+class ClientController(IClientController):
     """
     Controller handling client-related operations.
     Manages access control and coordinates between routes and services.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, client_service: IClientService):
         """
         Initialize ClientController with database session.
         
         Args:
             db: Database session
         """
-        self.client_service = ClientService(db)
+        self.client_service = client_service
 
     def _check_client_access(self, client_id: UUID, current_user: User):
         """

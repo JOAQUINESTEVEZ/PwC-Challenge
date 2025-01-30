@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session
 
+from ..interfaces.repositories.audit_log_repository import IAuditLogRepository
 from ..models.audit_logs_model import AuditLog as AuditLogModel
 from ..entities.audit_log import AuditLog
 
-class AuditLogRepository:
+class AuditLogRepository(IAuditLogRepository):
     """
     Repository for AuditLog-specific database operations.
     """

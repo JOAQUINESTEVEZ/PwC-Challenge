@@ -1,29 +1,27 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 from typing import Dict, Any
 
-from ..services.auth_service import AuthService
-from ..schemas.request.login import LoginRequest
+from ..interfaces.controllers.auth_controller import IAuthController
+from ..interfaces.services.auth_service import IAuthService
 from ..schemas.request.signup import SignupRequest
 from ..schemas.response.login import LoginResponse
 from ..schemas.dto.user_dto import UserDTO
 from ..schemas.dto.client_dto import ClientDTO
-from ..dependencies.auth import get_current_user
 
-class AuthController:
+class AuthController(IAuthController):
     """
     Controller handling authentication-related business logic.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, auth_service: IAuthService):
         """
         Initialize AuthController with database session.
         
         Args:
             db: Database session
         """
-        self.auth_service = AuthService(db)
+        self.auth_service = auth_service
 
     async def login(self, form_data: OAuth2PasswordRequestForm) -> LoginResponse:
         """

@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 
 from ..models.client_model import Client as ClientModel
 from ..entities.client import Client
+from ..interfaces.repositories.client_repository import IClientRepository
 
-class ClientRepository:
+class ClientRepository(IClientRepository):
     """
     Repository for Client-specific database operations.
     """

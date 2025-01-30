@@ -2,23 +2,23 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-from ..services.invoice_service import InvoiceService
+
+from ..interfaces.controllers.invoice_controller import IInvoiceController
+from ..interfaces.services.invoice_service import IInvoiceService
 from ..entities.user import User
-from ..entities.invoice import Invoice
 from ..schemas.request.invoice import InvoiceCreate, InvoiceUpdate
 from ..schemas.response.invoice import InvoiceResponse
 from ..schemas.dto.invoice_dto import InvoiceDTO
 
-class InvoiceController:
+class InvoiceController(IInvoiceController):
     """
     Controller for managing invoice operations.
     Handles access control and coordinates between routes and services.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, invoice_service: IInvoiceService):
         """Initialize controller with database session."""
-        self.invoice_service = InvoiceService(db)
+        self.invoice_service = invoice_service
 
     def _check_invoice_access(self, invoice_dto: InvoiceDTO, current_user: User):
         """

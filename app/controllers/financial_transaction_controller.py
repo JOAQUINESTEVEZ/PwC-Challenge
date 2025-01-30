@@ -2,28 +2,28 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-from ..services.financial_transaction_service import FinancialTransactionService
+
+from ..interfaces.controllers.financial_transaction_controller import IFinancialTransactionController
+from ..interfaces.services.financial_transaction_service import IFinancialTransactionService
 from ..entities.user import User
-from ..entities.financial_transaction import FinancialTransaction
 from ..schemas.request.financial_transaction import FinancialTransactionCreate, FinancialTransactionUpdate
 from ..schemas.response.financial_transaction import FinancialTransactionResponse
 from ..schemas.dto.transaction_dto import TransactionDTO
 
-class FinancialTransactionController:
+class FinancialTransactionController(IFinancialTransactionController):
     """
     Controller for managing financial transaction operations.
     Handles access control and coordinates between routes and services.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, transaction_service: IFinancialTransactionService):
         """
         Initialize controller with database session.
 
         Args:
             db: SQLAlchemy database session
         """
-        self.transaction_service = FinancialTransactionService(db)
+        self.transaction_service = transaction_service
 
     def _check_transaction_access(self, transaction: TransactionDTO, current_user: User):
         """

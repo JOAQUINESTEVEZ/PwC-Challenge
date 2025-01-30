@@ -1,16 +1,17 @@
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from sqlalchemy.orm import Session
 from fastapi.responses import StreamingResponse
-from ..db import get_db
-from ..controllers.client_controller import ClientController
+from dependency_injector.wiring import inject, Provide
+
+from ..interfaces.controllers.client_controller import IClientController
+from ..interfaces.controllers.report_controller import IReportController
 from ..schemas.request.client import ClientCreate, ClientUpdate
 from ..schemas.response.client import ClientResponse
 from ..dependencies.auth import get_current_user, check_permissions
 from ..dependencies.rate_limit import check_user_pdf_rate_limit
 from ..entities.user import User
-from ..controllers.report_controller import ReportController
+from ..container import Container
 
 router = APIRouter()
 
@@ -23,10 +24,11 @@ router = APIRouter()
                 403: {"description": "Not enough permissions"},
                 400: {"description": "Client already exists"}
             })
+@inject
 async def create_client(
     client_data: ClientCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    client_controller: IClientController = Depends(Provide[Container.client_controller])
 ) -> ClientResponse:
     """
     Create a new client. Requires 'create' permission on 'clients' resource.
@@ -42,7 +44,6 @@ async def create_client(
     Raises:
         HTTPException: If client creation fails or permission denied
     """
-    client_controller = ClientController(db)
     return await client_controller.create_client(client_data, current_user)
 
 @router.get("/{client_id}",
@@ -53,10 +54,11 @@ async def create_client(
                403: {"description": "Not enough permissions"},
                404: {"description": "Client not found"}
            })
+@inject
 async def get_client(
     client_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    client_controller: IClientController = Depends(Provide[Container.client_controller])
 ) -> ClientResponse:
     """
     Get a specific client by ID. Requires 'read' permission on 'clients' resource.
@@ -72,7 +74,6 @@ async def get_client(
     Raises:
         HTTPException: If client not found or access denied
     """
-    client_controller = ClientController(db)
     return await client_controller.get_client(client_id, current_user)
 
 @router.get("",
@@ -82,12 +83,13 @@ async def get_client(
                401: {"description": "Not authenticated"},
                403: {"description": "Not enough permissions"}
            })
+@inject
 async def get_clients(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1),
     search: Optional[str] = Query(None, description="Search term for client name or industry"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    client_controller: IClientController = Depends(Provide[Container.client_controller])
 ) -> List[ClientResponse]:
     """
     Get all clients with pagination. Requires 'read' permission on 'clients' resource.
@@ -102,8 +104,6 @@ async def get_clients(
     Returns:
         List[ClientResponse]: List of clients matching criteria
     """
-    client_controller = ClientController(db)
-    
     if search:
         return await client_controller.search_clients(search, current_user)
     return await client_controller.get_all_clients(skip, limit, current_user)
@@ -117,11 +117,12 @@ async def get_clients(
                404: {"description": "Client not found"},
                400: {"description": "Client name already exists"}
            })
+@inject
 async def update_client(
     client_id: UUID,
     client_data: ClientUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    client_controller: IClientController = Depends(Provide[Container.client_controller])
 ) -> ClientResponse:
     """
     Update a client. Requires 'update' permission on 'clients' resource.
@@ -138,7 +139,6 @@ async def update_client(
     Raises:
         HTTPException: If client not found or update fails
     """
-    client_controller = ClientController(db)
     return await client_controller.update_client(client_id, client_data, current_user)
 
 @router.delete("/{client_id}",
@@ -149,10 +149,11 @@ async def update_client(
                  403: {"description": "Not enough permissions"},
                  404: {"description": "Client not found"}
              })
+@inject
 async def delete_client(
     client_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    client_controller: IClientController = Depends(Provide[Container.client_controller])
 ):
     """
     Delete a client. Requires 'delete' permission on 'clients' resource.
@@ -165,8 +166,7 @@ async def delete_client(
     Raises:
         HTTPException: If client not found or deletion fails
     """
-    client_controller = ClientController(db)
-    result = await client_controller.delete_client(client_id, current_user)
+    await client_controller.delete_client(client_id, current_user)
     
     # If client was deleted successfully, return 204 No Content
     # If deletion failed, controller would have raised appropriate HTTPException
@@ -211,12 +211,13 @@ async def delete_client(
                }
            },
            response_class=StreamingResponse)
+@inject
 async def get_client_report(
     client_id: UUID,
     include_transactions: bool = Query(True, description="Include transactions section in report"),
     include_invoices: bool = Query(True, description="Include invoices section in report"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    report_controller: IReportController = Depends(Provide[Container.report_controller])
 ):
     """
     Get a PDF report of client's financial history. Requires 'read' permission.
@@ -245,7 +246,6 @@ async def get_client_report(
                 "instance": f"/clients/{client_id}/report"
             }
         )
-    report_controller = ReportController(db)
     pdf_buffer = await report_controller.generate_client_financial_report(
         client_id,
         current_user,

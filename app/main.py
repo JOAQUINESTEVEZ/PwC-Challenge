@@ -1,13 +1,27 @@
 from fastapi import FastAPI
-from sqlalchemy import text
-from app.db import engine
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from app.config import settings
+from app.container import Container
 from app.routes import auth_route, client_route, financial_transaction_route, invoice_route
 
+# Create and configure the container
+container = Container()
+container.config.from_dict({
+    "database_url": settings.database_url,
+    "secret_key": settings.secret_key,
+    "algorithm": settings.algorithm,
+    "access_token_expire_minutes": settings.access_token_expire_minutes,
+})
+
 # Initialize the FastAPI app
-app = FastAPI()
+app = FastAPI(
+    title="Financial Management API",
+    description="API for managing clients, invoices, and financial transactions"
+)
+
+# Store container in app instance
+app.container = container
 
 # CORS middleware
 app.add_middleware(
@@ -32,9 +46,9 @@ def healthcheck():
 @app.get("/version", tags=["Version"])
 def version():
     return {
-        "version": "1.1.0",
-        "release_date": "2025-01-16",
-        "changelog": "Added clients module with CRUD operations and role-based access control"
+        "version": "2.0.0",
+        "release_date": "2025-01-29",
+        "changelog": "Added container for DI and IoC"
     }
 
 # Error handler for Problem Details

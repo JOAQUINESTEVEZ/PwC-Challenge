@@ -1,29 +1,30 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import date, datetime, UTC
-from sqlalchemy.orm import Session
+
+from ..interfaces.repositories.financial_transaction_repository import IFinancialTransactionRepository
+from ..interfaces.services.financial_transaction_service import IFinancialTransactionService
+from ..interfaces.services.audit_service import IAuditService
 from ..entities.user import User
 from ..entities.financial_transaction import FinancialTransaction
-from ..repositories.financial_transaction_repository import FinancialTransactionRepository
-from .audit_log_service import AuditService
 from ..schemas.dto.transaction_dto import TransactionDTO
 from decimal import Decimal
 
-class FinancialTransactionService:
+class FinancialTransactionService(IFinancialTransactionService):
     """
     Service for handling financial transaction business logic.
     Manages transaction operations and business rules.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, transaction_repository: IFinancialTransactionRepository, audit_service: IAuditService):
         """
         Initialize service with database session.
         
         Args:
             db: Database session
         """
-        self.transaction_repository = FinancialTransactionRepository(db)
-        self.audit_service = AuditService(db)
+        self.transaction_repository = transaction_repository
+        self.audit_service = audit_service
 
     async def create_transaction(self, transaction_dto: TransactionDTO, current_user: User) -> TransactionDTO:
         """

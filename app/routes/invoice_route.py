@@ -2,13 +2,14 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
-from ..db import get_db
-from ..controllers.invoice_controller import InvoiceController
+from dependency_injector.wiring import inject, Provide
+
+from ..interfaces.controllers.invoice_controller import IInvoiceController
 from ..schemas.request.invoice import InvoiceCreate, InvoiceUpdate
 from ..schemas.response.invoice import InvoiceResponse
 from ..dependencies.auth import get_current_user, check_permissions
 from ..entities.user import User
+from ..container import Container
 
 router = APIRouter()
 
@@ -22,10 +23,11 @@ router = APIRouter()
                 404: {"description": "Client not found"},
                 400: {"description": "Invalid invoice data"}
             })
+@inject
 async def create_invoice(
     invoice_data: InvoiceCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ) -> InvoiceResponse:
     """
     Create a new invoice.
@@ -41,8 +43,7 @@ async def create_invoice(
     Raises:
         HTTPException: If creation fails or permissions not met
     """
-    controller = InvoiceController(db)
-    return await controller.create_invoice(invoice_data, current_user)
+    return await invoice_controller.create_invoice(invoice_data, current_user)
 
 @router.get("/overdue",
            response_model=List[InvoiceResponse],
@@ -51,9 +52,10 @@ async def create_invoice(
                401: {"description": "Not authenticated"},
                403: {"description": "Not enough permissions"}
            })
+@inject
 async def get_overdue_invoices(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ) -> List[InvoiceResponse]:
     """
     Get all overdue invoices.
@@ -66,8 +68,7 @@ async def get_overdue_invoices(
     Returns:
         List[Invoice]: List of overdue invoices
     """
-    controller = InvoiceController(db)
-    return await controller.get_overdue_invoices(current_user)
+    return await invoice_controller.get_overdue_invoices(current_user)
 
 @router.get("/{invoice_id}",
            response_model=InvoiceResponse,
@@ -77,10 +78,11 @@ async def get_overdue_invoices(
                403: {"description": "Not enough permissions"},
                404: {"description": "Invoice not found"}
            })
+@inject
 async def get_invoice(
     invoice_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ) -> InvoiceResponse:
     """
     Get a specific invoice by ID.
@@ -97,8 +99,7 @@ async def get_invoice(
     Raises:
         HTTPException: If invoice not found or access denied
     """
-    controller = InvoiceController(db)
-    return await controller.get_invoice(invoice_id, current_user)
+    return await invoice_controller.get_invoice(invoice_id, current_user)
 
 @router.get("",
            response_model=List[InvoiceResponse],
@@ -107,6 +108,7 @@ async def get_invoice(
                401: {"description": "Not authenticated"},
                403: {"description": "Not enough permissions"}
            })
+@inject
 async def search_invoices(
     client_id: Optional[UUID] = Query(None, description="Filter by client ID"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -116,7 +118,7 @@ async def search_invoices(
     max_amount: Optional[float] = Query(None, description="Maximum invoice amount"),
     is_overdue: Optional[bool] = Query(None, description="Filter overdue invoices"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ) -> List[InvoiceResponse]:
     """
     Search and filter invoices.
@@ -136,8 +138,7 @@ async def search_invoices(
     Returns:
         List[Invoice]: List of matching invoices
     """
-    controller = InvoiceController(db)
-    return await controller.search_invoices(
+    return await invoice_controller.search_invoices(
         client_id=client_id,
         status=status,
         start_date=start_date,
@@ -157,11 +158,12 @@ async def search_invoices(
                404: {"description": "Invoice not found"},
                400: {"description": "Invalid update data"}
            })
+@inject
 async def update_invoice(
     invoice_id: UUID,
     invoice_data: InvoiceUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ) -> InvoiceResponse:
     """
     Update an existing invoice.
@@ -179,8 +181,7 @@ async def update_invoice(
     Raises:
         HTTPException: If invoice not found or update fails
     """
-    controller = InvoiceController(db)
-    return await controller.update_invoice(invoice_id, invoice_data, current_user)
+    return await invoice_controller.update_invoice(invoice_id, invoice_data, current_user)
 
 @router.delete("/{invoice_id}",
              status_code=status.HTTP_204_NO_CONTENT,
@@ -191,10 +192,11 @@ async def update_invoice(
                  404: {"description": "Invoice not found"},
                  400: {"description": "Cannot delete paid invoice"}
              })
+@inject
 async def delete_invoice(
     invoice_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
 ):
     """
     Delete an invoice.
@@ -208,6 +210,5 @@ async def delete_invoice(
     Raises:
         HTTPException: If invoice not found or deletion fails
     """
-    controller = InvoiceController(db)
-    await controller.delete_invoice(invoice_id, current_user)
+    await invoice_controller.delete_invoice(invoice_id, current_user)
     return None

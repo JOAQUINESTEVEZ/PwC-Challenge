@@ -1,25 +1,25 @@
 from uuid import UUID
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from ..services.report_service import ReportService
-from ..entities.user import User
-
 from io import BytesIO
 
-class ReportController:
+from ..interfaces.controllers.report_controller import IReportController
+from ..interfaces.services.report_service import IReportService
+from ..entities.user import User
+
+class ReportController(IReportController):
     """
     Controller for handling report generation operations.
     Manages access control and coordinates between routes and services.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, report_service: IReportService):
         """
         Initialize controller with database session.
         
         Args:
             db: Database session
         """
-        self.report_service = ReportService(db)
+        self.report_service = report_service
 
     def _check_client_access(self, client_id: UUID, current_user: User) -> None:
         """

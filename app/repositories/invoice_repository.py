@@ -1,15 +1,15 @@
-# repositories/invoice_repository.py
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import and_
 from datetime import date
 from decimal import Decimal
 
+from ..interfaces.repositories.invoice_repository import IInvoiceRepository
 from ..models.invoice_model import Invoice as InvoiceModel
 from ..entities.invoice import Invoice, InvoiceStatus
 
-class InvoiceRepository:
+class InvoiceRepository(IInvoiceRepository):
     """Repository for Invoice specific database operations."""
     
     def __init__(self, db: Session):

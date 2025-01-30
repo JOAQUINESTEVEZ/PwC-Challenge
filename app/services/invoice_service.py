@@ -2,23 +2,24 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date, datetime, UTC
 from decimal import Decimal
-from sqlalchemy.orm import Session
-from .audit_log_service import AuditService
-from ..repositories.invoice_repository import InvoiceRepository
+
+from ..interfaces.services.invoice_service import IInvoiceService
+from ..interfaces.repositories.invoice_repository import IInvoiceRepository
+from ..interfaces.services.audit_service import IAuditService
 from ..entities.user import User
 from ..entities.invoice import Invoice, InvoiceStatus
 from ..schemas.dto.invoice_dto import InvoiceDTO
 
-class InvoiceService:
+class InvoiceService(IInvoiceService):
     """
     Service for handling invoice business logic.
     Manages invoice operations and business rules.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, invoice_repository: IInvoiceRepository, audit_service: IAuditService):
         """Initialize service with database session."""
-        self.invoice_repository = InvoiceRepository(db)
-        self.audit_service = AuditService(db)
+        self.invoice_repository = invoice_repository
+        self.audit_service = audit_service
 
     async def create_invoice(self, invoice_dto: InvoiceDTO, current_user: User) -> InvoiceDTO:
         """

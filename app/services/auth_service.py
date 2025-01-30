@@ -1,25 +1,26 @@
 from typing import Optional
 from datetime import datetime, UTC
-from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-from ..repositories.user_repository import UserRepository
-from ..repositories.client_repository import ClientRepository
-from .audit_log_service import AuditService
+from fastapi import HTTPException, status
+
+from ..interfaces.services.auth_service import IAuthService
+from ..interfaces.repositories.user_repository import IUserRepository
+from ..interfaces.repositories.client_repository import IClientRepository
+from ..interfaces.services.audit_service import IAuditService
 from ..entities.user import User
 from ..entities.client import Client
 from ..schemas.response.login import LoginResponse
 from ..schemas.dto.client_dto import ClientDTO
 from ..schemas.dto.user_dto import UserDTO
 from ..utils.jwt import create_access_token
-from fastapi import HTTPException, status
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-class AuthService:
-    def __init__(self, db: Session):
-        self.user_repository = UserRepository(db)
-        self.client_repository = ClientRepository(db)
-        self.audit_service = AuditService(db)
+class AuthService(IAuthService):
+    def __init__(self, user_repository: IUserRepository, client_repository: IClientRepository, audit_service: IAuditService):
+        self.user_repository = user_repository
+        self.client_repository = client_repository
+        self.audit_service = audit_service
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return pwd_context.verify(plain_password, hashed_password)

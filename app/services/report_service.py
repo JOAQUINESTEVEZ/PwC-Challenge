@@ -1,30 +1,31 @@
-from sqlalchemy.orm import Session
 from uuid import UUID
+from io import BytesIO
+
+from ..interfaces.services.report_service import IReportService
+from ..interfaces.repositories.client_repository import IClientRepository
+from ..interfaces.repositories.financial_transaction_repository import IFinancialTransactionRepository
+from ..interfaces.repositories.invoice_repository import IInvoiceRepository
 from ..entities.client import Client
 from ..entities.financial_transaction import FinancialTransaction
 from ..entities.invoice import Invoice
-from ..repositories.client_repository import ClientRepository
-from ..repositories.financial_transaction_repository import FinancialTransactionRepository
-from ..repositories.invoice_repository import InvoiceRepository
 from ..utils.pdf_generator import generate_financial_report
-from io import BytesIO
 
-class ReportService:
+class ReportService(IReportService):
     """
     Service for generating various types of reports.
     Handles report generation business logic and data gathering.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, client_repository: IClientRepository, transaction_repository: IFinancialTransactionRepository, invoice_repository: IInvoiceRepository):
         """
         Initialize service with database session and repositories.
         
         Args:
             db: Database session
         """
-        self.client_repository = ClientRepository(db)
-        self.transaction_repository = FinancialTransactionRepository(db)
-        self.invoice_repository = InvoiceRepository(db)
+        self.client_repository = client_repository
+        self.transaction_repository = transaction_repository
+        self.invoice_repository = invoice_repository
 
     async def _get_client_data(self, client_id: UUID) -> Client:
         """

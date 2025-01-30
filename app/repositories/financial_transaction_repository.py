@@ -2,10 +2,12 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 from datetime import date
+
+from ..interfaces.repositories.financial_transaction_repository import IFinancialTransactionRepository
 from ..models.financial_transaction_model import FinancialTransaction as FinancialTransactionModel
 from ..entities.financial_transaction import FinancialTransaction
 
-class FinancialTransactionRepository:
+class FinancialTransactionRepository(IFinancialTransactionRepository):
     """Repository for handling financial transaction database operations.
     """
     

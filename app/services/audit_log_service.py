@@ -1,12 +1,13 @@
 from datetime import datetime, UTC
 from uuid import UUID
-from sqlalchemy.orm import Session
-from ..repositories.audit_log_repository import AuditLogRepository
+
+from ..interfaces.services.audit_service import IAuditService
+from ..interfaces.repositories.audit_log_repository import IAuditLogRepository
 from ..entities.audit_log import AuditLog
 
-class AuditService:
-    def __init__(self, db: Session):
-        self.audit_log_repository = AuditLogRepository(db)
+class AuditService(IAuditService):
+    def __init__(self, audit_log_repository: IAuditLogRepository):
+        self.audit_log_repository = audit_log_repository
     
     async def log_change(
         self,

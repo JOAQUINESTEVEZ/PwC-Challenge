@@ -1,16 +1,18 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
-from ..db import get_db
+from dependency_injector.wiring import inject, Provide
+
+from ..container import Container
 from ..utils.jwt import verify_token
 from ..repositories.user_repository import UserRepository
 from ..services.permission_service import PermissionService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+@inject
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    user_repository: UserRepository = Depends(Provide[Container.user_repository])
 ) -> dict:
     """Get the current authenticated user."""
     payload = verify_token(token)
@@ -27,7 +29,6 @@ async def get_current_user(
             }
         )
     
-    user_repository = UserRepository(db)
     user = await user_repository.get_by_id(user_id)
     if user is None:
         raise HTTPException(
@@ -44,11 +45,11 @@ async def get_current_user(
 
 def check_permissions(required_resource: str, required_action: str):
     """Decorator to check if the user has the required permissions."""
+    @inject
     async def permission_checker(
         current_user: dict = Depends(get_current_user),
-        db: Session = Depends(get_db)
+        permission_service: PermissionService = Depends(Provide[Container.permission_service])
     ):
-        permission_service = PermissionService(db)
 
         # Check if Permission Entity is not None
         permission_entity = await permission_service.check_permission(

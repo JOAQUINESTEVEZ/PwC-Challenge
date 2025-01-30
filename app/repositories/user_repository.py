@@ -1,10 +1,12 @@
 from typing import Optional
 from sqlalchemy.orm import Session
 from uuid import UUID
+
+from ..interfaces.repositories.user_repository import IUserRepository
 from ..models.user_model import User as UserModel
 from ..entities.user import User
 
-class UserRepository:
+class UserRepository(IUserRepository):
     """
     Repository for User-specific database operations.
     """

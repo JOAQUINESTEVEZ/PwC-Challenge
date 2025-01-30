@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 from typing import Dict, Any
+from dependency_injector.wiring import inject, Provide
 
-from ..db import get_db
-from ..controllers.auth_controller import AuthController
+from ..interfaces.controllers.auth_controller import IAuthController
 from ..schemas.request.signup import SignupRequest
 from ..schemas.response.login import LoginResponse
 from ..dependencies.auth import get_current_user
+from ..container import Container
 
 router = APIRouter()
 
@@ -30,9 +30,10 @@ router = APIRouter()
                     }
                 }
             })
+@inject
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    auth_controller: IAuthController = Depends(Provide[Container.auth_controller])
 ) -> LoginResponse:
     """
     Endpoint for user authentication and token generation.
@@ -44,7 +45,6 @@ async def login(
     Returns:
         LoginResponse: Response containing access token
     """
-    auth_controller = AuthController(db)
     return await auth_controller.login(form_data)
 
 @router.post("/signup",
@@ -66,15 +66,15 @@ async def login(
                     }
                 }
             })
+@inject
 async def signup(
     signup_data: SignupRequest,
-    db: Session = Depends(get_db)
+    auth_controller: IAuthController = Depends(Provide[Container.auth_controller])
 ) -> LoginResponse:
     """
     Register a new client user and create corresponding client record.
     Returns an access token upon successful registration.
     """
-    auth_controller = AuthController(db)
     return await auth_controller.signup(signup_data)
 
 @router.get("/me",
@@ -96,9 +96,10 @@ async def signup(
                     }
                 }
             })
+@inject
 async def get_current_user(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    auth_controller: IAuthController = Depends(Provide[Container.auth_controller])
 ) -> Dict[str, Any]:
     """
     Endpoint to get current authenticated user information.
@@ -110,5 +111,4 @@ async def get_current_user(
     Returns:
         Dict[str, Any]: User information
     """
-    auth_controller = AuthController(db)
     return await auth_controller.get_current_user_info(current_user)

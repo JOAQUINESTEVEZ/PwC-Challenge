@@ -1,28 +1,29 @@
 from typing import List
 from uuid import UUID
 from datetime import datetime, UTC
-from sqlalchemy.orm import Session
-from ..repositories.client_repository import ClientRepository
-from .audit_log_service import AuditService
+
+from ..interfaces.services.client_service import IClientService
+from ..interfaces.services.audit_service import IAuditService
+from ..interfaces.repositories.client_repository import IClientRepository
 from ..schemas.dto.client_dto import ClientDTO
 from ..entities.user import User
 from ..entities.client import Client
 
-class ClientService:
+class ClientService(IClientService):
     """
     Service for handling client-related business logic.
     Handles data operations, validations, and business rules.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, client_repository: IClientRepository, audit_service: IAuditService):
         """
         Initialize service with database session.
         
         Args:
             db: Database session
         """
-        self.client_repository = ClientRepository(db)
-        self.audit_service = AuditService(db)  
+        self.client_repository = client_repository
+        self.audit_service = audit_service
 
     async def create_client(self, client_dto: ClientDTO, created_by: User) -> ClientDTO:
         """

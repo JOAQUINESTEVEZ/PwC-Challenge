@@ -1,9 +1,11 @@
 from typing import Optional
 from sqlalchemy.orm import Session
+
+from ..interfaces.repositories.permission_repository import IPermissionRepository
 from ..models.permission_model import Permission as PermissionModel
 from ..entities.permission import Permission
 
-class PermissionRepository:
+class PermissionRepository(IPermissionRepository):
     """
     Repository for handling permission-related CRUD operations.
     """

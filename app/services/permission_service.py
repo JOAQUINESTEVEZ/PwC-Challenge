@@ -1,19 +1,20 @@
-from sqlalchemy.orm import Session
 from typing import Optional
-from ..repositories.permission_repository import PermissionRepository
+
+from ..interfaces.services.permission_service import IPermissionService
+from ..interfaces.repositories.permission_repository import IPermissionRepository
 from ..entities.permission import Permission
 
-class PermissionService:
+class PermissionService(IPermissionService):
     """
     Service for handling permission-related business logic.
     """
 
-    def __init__(self, db: Session):
-        self.permission_repo = PermissionRepository(db)
+    def __init__(self, permission_repository: IPermissionRepository):
+        self.permission_repository = permission_repository
 
     async def check_permission(self, role_id: str, resource: str, action: str) -> Optional[Permission]:
         """
         Check if the given role_id has the required resource and action permission.
         """
-        permission_entity = await self.permission_repo.get_permission(role_id, resource, action)
+        permission_entity = await self.permission_repository.get_permission(role_id, resource, action)
         return permission_entity is not None

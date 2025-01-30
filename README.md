@@ -1,12 +1,8 @@
 # PwC-Challenge: Financial Management System
-#### Notes:
-- For security reasons, the .env file is not published in this public repository. If needed, please contact me and I'll send it to you.
-- Solution Hosted in Render: https://pwc-challenge.onrender.com/docs
-- For experimenting with the API, go to 'sample_data' folder to use sample data and accounts.
-  
+
 ## Overview
 
-This Financial Management System is a robust, role-based API designed to streamline financial operations for businesses. Built with FastAPI and SQLAlchemy, the system provides comprehensive features for managing clients, financial transactions, and invoices with strong security and access control.
+A robust Financial Management System built with FastAPI, implementing clean architecture and modern design principles. The system provides comprehensive features for managing clients, financial transactions, and invoices with strong security and role-based access control.
 
 ## Key Features
 
@@ -15,46 +11,17 @@ This Financial Management System is a robust, role-based API designed to streaml
 - 💰 Financial Transaction Tracking
 - 📄 Invoice Management
 - 🔍 Advanced Search and Filtering
-- 📊 Financial Reporting
+- 📊 Financial Report Generation
 
 ## Technology Stack
 
-- **Backend**: FastAPI
+- **Backend Framework**: FastAPI
+- **Database**: PostgreSQL (Supabase)
 - **ORM**: SQLAlchemy
-- **Database**: Supabase
 - **Authentication**: JWT
 - **Testing**: Pytest
-- **PDF Generation**: ReportLab
-- **Database Migration**: Alembic
+- **Documentation**: OpenAPI/Swagger
 - **Deployment**: Render
-
-## Development Approach
-
-### Architecture
-The project follows a layered, clean architecture:
-- **Models**: SQLAlchemy database models
-- **Repositories**: Data access layer
-- **Services**: Business logic implementation
-- **Controllers**: Request handling and validation
-- **Routes**: API endpoint definitions
-
-### Security Considerations
-- Bcrypt password hashing
-- JWT-based authentication
-- Role-based permissions
-- Input validation at multiple levels
-
-### Testing Strategy
-Comprehensive test suite covering:
-- Unit testing
-- Integration testing
-- Model validations
-- Schema validations
-- API endpoint behaviors
-- Authorization checks
-- Business logic scenarios
-
-## Getting Started
 
 ## User Types and Workflow
 
@@ -63,6 +30,7 @@ Comprehensive test suite covering:
 The Financial Management System is designed to serve different types of users with carefully defined access levels:
 
 #### 1. Admin Users
+
 - **Full System Access**
 - Can perform all actions across the platform
 - Responsibilities:
@@ -73,6 +41,7 @@ The Financial Management System is designed to serve different types of users wi
   - Generate comprehensive reports
 
 #### 2. Finance Team Users
+
 - **Transactional and Financial Management**
 - Core financial operations specialists
 - Permissions:
@@ -83,6 +52,7 @@ The Financial Management System is designed to serve different types of users wi
   - Search and filter financial data
 
 #### 3. Auditor Users
+
 - **Compliance and Oversight**
 - Read-only access for financial monitoring
 - Capabilities:
@@ -93,6 +63,7 @@ The Financial Management System is designed to serve different types of users wi
   - Cannot modify or delete records
 
 #### 4. Client Users
+
 - **Self-Service and Limited Access**
 - View and manage their own financial information
 - Permissions:
@@ -104,12 +75,14 @@ The Financial Management System is designed to serve different types of users wi
 ### Typical Workflow Scenarios
 
 #### Scenario 1: New Client Onboarding
+
 1. Admin creates a new client profile
 2. System automatically generates a client user account
 3. Client receives login credentials
 4. Client can now view their financial information
 
 #### Scenario 2: Financial Transaction Processing
+
 1. Finance user logs a new transaction for a client
 2. Transaction is recorded with timestamp and details
 3. System automatically updates client financial records
@@ -117,6 +90,7 @@ The Financial Management System is designed to serve different types of users wi
 5. Client can view the transaction in their history
 
 #### Scenario 3: Invoice Management
+
 1. Finance user generates an invoice for a client
 2. Invoice is created with due date and amount
 3. System tracks payment status (Pending, Partially Paid, Paid)
@@ -125,6 +99,7 @@ The Financial Management System is designed to serve different types of users wi
 6. Overdue invoices flagged for follow-up
 
 #### Scenario 4: Financial Reporting
+
 1. Admin or Finance user generates a financial report
 2. Report includes:
    - Transaction history
@@ -138,67 +113,163 @@ The Financial Management System is designed to serve different types of users wi
 
 The system defines granular actions for each primary resource:
 
-| Resource             | Admin         | Finance       | Auditor       | Client        |
-|---------------------|---------------|---------------|---------------|---------------|
-| Clients             | CRUD          | CRU           | Read          | Read (Own)    |
-| Users               | CRUD          | -             | -             | -             |
-| Financial Transactions | CRUD      | CRUD          | Read          | Read (Own)    |
-| Audit Logs          | CRUD          | -             | Read          | -             |
-| Invoices            | CRUD          | CRUD          | Read          | Read (Own)    |
+| Resource               | Admin | Finance | Auditor | Client     |
+| ---------------------- | ----- | ------- | ------- | ---------- |
+| Clients                | CRUD  | CRU     | Read    | Read (Own) |
+| Users                  | CRUD  | -       | -       | -          |
+| Financial Transactions | CRUD  | CRUD    | Read    | Read (Own) |
+| Audit Logs             | CRUD  | -       | Read    | -          |
+| Invoices               | CRUD  | CRUD    | Read    | Read (Own) |
 
 **Notation Legend:**
+
 - **CRUD**: Create, Read, Update, Delete
 - **CRU**: Create, Read, Update
 - **Read**: View-only access
 - **Read (Own)**: Access limited to user's own records
 - **-**: No access
 
-## Development Steps
+## Clean Architecture
 
-The project was developed following a systematic, layer-by-layer approach:
+The system implements a layered architecture following SOLID principles, with clear separation of concerns:
 
-1. **Database Setup**
-   - Create database tables
-   - Populate roles and permissions
+### 1. Domain Layer
 
-2. **Models and Schemas**
-   - Implement FastAPI models
-   - Create Pydantic schemas
-   - Write comprehensive pytest tests for models and schemas
+- **Entities**: Core business objects and logic
+  ```
+  /entities
+    - client.py
+    - invoice.py
+    - financial_transaction.py
+    - user.py
+    - audit_log.py
+    - permission.py
+  ```
+- Contains business rules and validations
+- Framework-independent
 
-3. **Authentication System**
-   - Implement basic routes
-   - Develop login functionality
-   - Create authentication utilities
-   - Build authentication layers:
-     - Route
-     - Controller
-     - Service
-     - Repository
-   - Write authentication tests
+### 2. Application Layer
 
-4. **Client SignUp**
-   - Add signup functionality
-   - Implement user registration tests
+- **Interfaces**: Abstract contracts for services and repositories
+  ```
+  /interfaces
+    /services
+    /repositories
+  ```
+- **DTOs**: Data transfer objects for inter-layer communication
+  ```
+  /schemas/dto
+  ```
 
-5. **Client Management**
-   - Create client routes
-   - Develop client CRUD operations
-   - Implement client-related tests
+### 3. Infrastructure Layer
 
-6. **Financial Transactions**
-   - Develop financial transaction routes
-   - Implement transaction management
-   - Write comprehensive transaction tests
+- **Models**: Database models using SQLAlchemy
 
-7. **Invoice Management**
-   - Create invoice routes
-   - Implement invoice lifecycle management
-   - Develop invoice-related tests
+  ```
+  /models
 
-8. **Reporting**
-   - Add report generation endpoint
-   - Implement PDF report utility
-   - Create reporting tests
+  ```
 
-Swagger UI is available at `/docs` for interactive API exploration.
+- **Repository Implementations**: Data access logic
+  ```
+  /repositories
+  ```
+
+### 4. Presentation Layer
+
+- **Request/Response Models**: Pydantic schemas for validation
+  ```
+  /schemas
+    /request
+    /response
+  ```
+- **Controllers**: Request handling and business logic coordination
+- **Routes**: API endpoint definitions
+
+## Dependency Management
+
+### Inversion of Control (IoC)
+
+The system implements IoC through interfaces and dependency injection:
+
+```python
+# Interface definition
+class IClientService(ABC):
+    @abstractmethod
+    async def create_client(self, client_dto: ClientDTO) -> ClientDTO:
+        pass
+
+# Service implementation
+class ClientService(IClientService):
+    def __init__(self, client_repository: IClientRepository):
+        self.client_repository = client_repository
+```
+
+### Dependency Injection Container
+
+Centralized dependency management using `dependency-injector`
+
+## Data Flow & Request Lifecycle
+
+1. **HTTP Request → Route**
+
+2. **Route → Controller**
+
+3. **Controller → Service**
+
+4. **Service → Repository**
+
+## Benefits of This Architecture
+
+1. **Maintainability**
+
+   - Clear separation of concerns
+   - Isolated business logic
+   - Framework independence
+
+2. **Testability**
+
+   - Easily mockable dependencies
+   - Isolated component testing
+   - Clear boundaries
+
+3. **Flexibility**
+
+   - Swappable implementations
+   - Database agnostic
+   - Framework independent core
+
+4. **Security**
+   - Centralized authentication
+   - Role-based access control
+   - Input validation at multiple levels
+
+### Security Considerations
+
+- Bcrypt password hashing
+- JWT-based authentication
+- Role-based permissions
+- Input validation at multiple levels
+
+## Getting Started
+
+1. Clone the repository
+2. Create a `.env` file based on `.env.example`
+3. Install dependencies: `pip install -r requirements.txt`
+4. Run migrations: `alembic upgrade head`
+5. Start the server: `uvicorn app.main:app --reload`
+
+## API Documentation
+
+- Interactive API documentation: `/docs`
+- ReDoc alternative: `/redoc`
+- Hosted version: https://pwc-challenge.onrender.com/docs
+
+## Testing
+
+Run tests with: `pytest`
+
+## Notes
+
+- For security reasons, the `.env` file is not published
+- Sample data and accounts available in 'sample_data' folder
