@@ -4,14 +4,18 @@ from sqlalchemy.orm import Session
 from ..interfaces.repositories.permission_repository import IPermissionRepository
 from ..models.permission_model import Permission as PermissionModel
 from ..entities.permission import Permission
+from ..interfaces.repositories.cache_repository import ICacheRepository
 
 class PermissionRepository(IPermissionRepository):
     """
     Repository for handling permission-related CRUD operations.
     """
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, cache: ICacheRepository):
         """Initialize repository with db session."""
         self.db = db
+        self.cache = cache
+        # Longer TTL for permissions as they rarely change
+        self.permission_ttl = 86400 * 30  # 30 days
 
     def _to_model(self, entity: Permission) -> PermissionModel:
         """Convert entity to model."""
@@ -47,5 +51,35 @@ class PermissionRepository(IPermissionRepository):
         Returns:
             Optional[Permission]: The permission object or None
         """
-        model = self.db.query(PermissionModel).filter_by(role_id=role_id, resource=resource, action=action).first()
-        return self._to_entity(model) if model else None
+        # Create cache key
+        cache_key = f"perm:{role_id}:{resource}:{action}"
+        
+        # Try to get from cache
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return Permission.from_dict(cached_data)
+
+        # Get from database if not in cache
+        model = self.db.query(PermissionModel).filter(
+            PermissionModel.role_id == role_id,
+            PermissionModel.resource == resource,
+            PermissionModel.action == action
+        ).first()
+
+        if not model:
+            # Cache negative result to prevent repeated DB queries
+            # Use shorter TTL for negative results
+            await self.cache.set(cache_key, None, ttl=300)  # 5 minutes
+            return None
+
+        # Convert to entity
+        permission = self._to_entity(model)
+        
+        # Cache the result
+        await self.cache.set(
+            cache_key, 
+            permission.to_dict(),
+            ttl=self.permission_ttl
+        )
+        
+        return permission

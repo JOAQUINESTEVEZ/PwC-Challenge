@@ -64,8 +64,6 @@ class ClientRepository(IClientRepository):
         cache_key = f"id:{client_id}"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            print(f"key: {cache_key}")
-            print(f"data: {cached_data}")
             return Client(**cached_data)
 
         # If not in cache, get from database
@@ -81,8 +79,7 @@ class ClientRepository(IClientRepository):
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[Client]:
         """Get all clients with pagination."""
         models = self.db.query(ClientModel).offset(skip).limit(limit).all()
-        clients = [self._to_entity(model) for model in models]
-        return clients
+        return [self._to_entity(model) for model in models]
     
     async def get_client_by_name(self, name: str) -> Optional[Client]:
         """

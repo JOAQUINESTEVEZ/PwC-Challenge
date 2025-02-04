@@ -72,11 +72,18 @@ class Container(containers.DeclarativeContainer):
         redis_client=redis,
         namespace="client"
     )
+
+    permission_cache: providers.Factory[ICacheRepository] = providers.Factory(
+        RedisCacheRepository,
+        redis_client=redis,
+        namespace="permission"
+    )
     
     # Repositories
     permission_repository: providers.Factory[IPermissionRepository] = providers.Factory(
         PermissionRepository,
-        db=db
+        db=db,
+        cache=permission_cache
     )
 
     audit_repository: providers.Factory[IAuditLogRepository] = providers.Factory(
