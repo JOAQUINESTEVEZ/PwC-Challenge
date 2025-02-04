@@ -4,6 +4,7 @@ from starlette.responses import JSONResponse
 from app.config import settings
 from app.container import Container
 from app.routes import auth_route, client_route, financial_transaction_route, invoice_route
+from app.middleware.logging_middleware import LoggingMiddleware
 
 # Create and configure the container
 container = Container()
@@ -19,6 +20,9 @@ app = FastAPI(
     title="Financial Management API",
     description="API for managing clients, invoices, and financial transactions"
 )
+
+# Add logging middleware FIRST (to catch all requests)
+app.add_middleware(LoggingMiddleware)
 
 # Store container in app instance
 app.container = container
