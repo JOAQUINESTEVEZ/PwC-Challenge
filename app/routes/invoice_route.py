@@ -212,3 +212,22 @@ async def delete_invoice(
     """
     await invoice_controller.delete_invoice(invoice_id, current_user)
     return None
+
+@router.post("/{invoice_id}/payment",
+             response_model=InvoiceResponse,
+             status_code=status.HTTP_200_OK,
+             dependencies=[Depends(check_permissions("invoices", "update"))],
+             responses={
+                401: {"description": "Not authenticated"},
+                404: {"description": "Invoice not found"},
+                400: {"description": "Invalid payment amount"},
+                403: {"description": "Not enough permissions"}
+            })
+@inject
+async def make_payment(
+    invoice_id: UUID,
+    payment_amount: float,
+    current_user: User = Depends(get_current_user),
+    invoice_controller: IInvoiceController = Depends(Provide[Container.invoice_controller])
+) -> InvoiceResponse:
+    return await invoice_controller.make_payment(invoice_id, payment_amount, current_user)

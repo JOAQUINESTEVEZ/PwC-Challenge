@@ -1,4 +1,5 @@
 from typing import List, Optional
+from decimal import Decimal
 from uuid import UUID
 from datetime import date
 from fastapi import HTTPException, status
@@ -351,3 +352,38 @@ class InvoiceController(IInvoiceController):
 
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        
+    async def make_payment(
+        self,
+        invoice_id: UUID,
+        payment_amount: float,
+        current_user: User
+    ) -> InvoiceResponse:
+        try:
+            result_dto = await self.invoice_service.make_payment(
+                invoice_id, 
+                Decimal(str(payment_amount)), 
+                current_user
+            )
+            # Convert DTO to Response
+            return InvoiceResponse(
+                id=result_dto.id,
+                client_id=result_dto.client_id,
+                invoice_date=result_dto.invoice_date,
+                due_date=result_dto.due_date,
+                amount_due=result_dto.amount_due,
+                amount_paid=result_dto.amount_paid,
+                status=result_dto.status,
+                created_by=result_dto.created_by
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "type": "about:blank",
+                    "title": "Invalid payment",
+                    "status": 400,
+                    "detail": str(e),
+                    "instance": f"/invoices/{invoice_id}/payment"
+                }
+            )

@@ -78,6 +78,12 @@ class Container(containers.DeclarativeContainer):
         redis_client=redis,
         namespace="permission"
     )
+
+    invoice_cache: providers.Factory[ICacheRepository] = providers.Factory(
+        RedisCacheRepository,
+        redis_client=redis,
+        namespace="invoice"
+    )
     
     # Repositories
     permission_repository: providers.Factory[IPermissionRepository] = providers.Factory(
@@ -104,7 +110,8 @@ class Container(containers.DeclarativeContainer):
 
     invoice_repository: providers.Factory[IInvoiceRepository] = providers.Factory(
         InvoiceRepository,
-        db=db
+        db=db,
+        cache=invoice_cache
     )
 
     transaction_repository: providers.Factory[IFinancialTransactionRepository] = providers.Factory(

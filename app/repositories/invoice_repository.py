@@ -8,13 +8,15 @@ from decimal import Decimal
 from ..interfaces.repositories.invoice_repository import IInvoiceRepository
 from ..models.invoice_model import Invoice as InvoiceModel
 from ..entities.invoice import Invoice, InvoiceStatus
+from ..interfaces.repositories.cache_repository import ICacheRepository
 
 class InvoiceRepository(IInvoiceRepository):
     """Repository for Invoice specific database operations."""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, cache: ICacheRepository):
         """Initialize repository with database session."""
         self.db = db
+        self.cache = cache
 
     def _to_model(self, entity: Invoice) -> InvoiceModel:
         """Convert domain entity to database model."""
@@ -124,7 +126,16 @@ class InvoiceRepository(IInvoiceRepository):
         return [self._to_entity(model) for model in models]
 
     async def get_overdue(self, client_id: Optional[UUID] = None) -> List[Invoice]:
-        """Get overdue invoices."""
+        """Get overdue invoices with caching."""
+        cache_key = f"overdue:{client_id if client_id else 'all'}"
+        
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            print(f"Key: {cache_key}")
+            print(f"Data: {cached_data}")
+            return [Invoice.from_dict(item) for item in cached_data]
+
+        # Get from database
         query = self.db.query(InvoiceModel).filter(and_(
             InvoiceModel.due_date < date.today(),
             InvoiceModel.status != InvoiceStatus.PAID
@@ -134,7 +145,16 @@ class InvoiceRepository(IInvoiceRepository):
             query = query.filter(InvoiceModel.client_id == client_id)
 
         models = query.all()
-        return [self._to_entity(model) for model in models]
+        invoices = [self._to_entity(model) for model in models]
+        
+        # Cache for 5 minutes since overdue status can change
+        await self.cache.set(
+            cache_key, 
+            [invoice.to_dict() for invoice in invoices], 
+            ttl=300
+        )
+        
+        return invoices
     
     async def get_by_client_id(self, client_id: UUID) -> List[Invoice]:
         """Get all invoices for a specific client."""

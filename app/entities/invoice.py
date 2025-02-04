@@ -71,3 +71,34 @@ class Invoice:
     def can_be_deleted(self) -> bool:
         """Check if invoice can be deleted."""
         return self.status != InvoiceStatus.PAID
+    
+    def to_dict(self) -> dict:
+        """Convert invoice to dictionary for serialization."""
+        return {
+            "id": str(self.id),
+            "client_id": str(self.client_id),
+            "created_by": str(self.created_by),
+            "invoice_date": self.invoice_date.isoformat(),
+            "due_date": self.due_date.isoformat(),
+            "amount_due": str(self.amount_due),
+            "amount_paid": str(self.amount_paid),
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Invoice':
+        """Create invoice from dictionary."""
+        return cls(
+            id=UUID(data["id"]) if data["id"] else None,
+            client_id=UUID(data["client_id"]),
+            created_by=UUID(data["created_by"]),
+            invoice_date=date.fromisoformat(data["invoice_date"]),
+            due_date=date.fromisoformat(data["due_date"]),
+            amount_due=Decimal(data["amount_due"]),
+            amount_paid=Decimal(data["amount_paid"]),
+            status=InvoiceStatus(data["status"]),
+            created_at=datetime.fromisoformat(data["created_at"]),
+            updated_at=datetime.fromisoformat(data["updated_at"])
+        )

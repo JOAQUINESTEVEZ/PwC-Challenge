@@ -255,3 +255,33 @@ class InvoiceService(IInvoiceService):
 
         except Exception as e:
             raise ValueError(f"Error getting overdue invoices: {str(e)}")
+        
+    async def make_payment(
+        self,
+        invoice_id: UUID,
+        payment_amount: Decimal,
+        current_user: User
+    ) -> InvoiceDTO:
+        try:
+            invoice = await self.invoice_repository.get_by_id(invoice_id)
+
+            if not invoice:
+                raise ValueError(f"Invoice with id {invoice_id} not found")
+            
+            # Apply business logic
+            invoice.record_payment(payment_amount)
+            
+            invoice_updated = await self.invoice_repository.update(invoice)
+            
+            # Create audit log
+            await self.audit_service.log_change(
+                user_id=current_user.id,
+                record_id=invoice_id,
+                table_name="invoices",
+                change_type="UPDATE",
+                details=f"Payment of {payment_amount} recorded for invoice {invoice_id}"
+            )
+            
+            return InvoiceDTO.from_entity(invoice_updated)
+        except Exception as e:
+            raise ValueError(f"Error processing payment: {str(e)}")
