@@ -1,9 +1,10 @@
 from dependency_injector import containers, providers
 from sqlalchemy.orm import Session
-from dependency_injector.wiring import inject, Provide
+from redis import asyncio as aioredis
 
 from .config import settings
 from .db import SessionLocal
+from .utils.redis_config import get_redis
 
 # Repositories
 from .repositories.client_repository import ClientRepository
@@ -12,6 +13,7 @@ from .repositories.financial_transaction_repository import FinancialTransactionR
 from .repositories.user_repository import UserRepository
 from .repositories.audit_log_repository import AuditLogRepository
 from .repositories.permission_repository import PermissionRepository
+from .repositories.cache_repository import RedisCacheRepository
 
 # Services
 from .services.client_service import ClientService
@@ -36,6 +38,7 @@ from .interfaces.repositories.financial_transaction_repository import IFinancial
 from .interfaces.repositories.user_repository import IUserRepository
 from .interfaces.repositories.audit_log_repository import IAuditLogRepository
 from .interfaces.repositories.permission_repository import IPermissionRepository
+from .interfaces.repositories.cache_repository import ICacheRepository
 
 from .interfaces.services.client_service import IClientService
 from .interfaces.services.invoice_service import IInvoiceService
@@ -57,6 +60,18 @@ class Container(containers.DeclarativeContainer):
     
     # Database
     db = providers.Singleton(SessionLocal)
+
+    # Redis client
+    redis = providers.Resource(
+        get_redis
+    )
+
+    # Cache Repositories
+    client_cache: providers.Factory[ICacheRepository] = providers.Factory(
+        RedisCacheRepository,
+        redis_client=redis,
+        namespace="client"
+    )
     
     # Repositories
     permission_repository: providers.Factory[IPermissionRepository] = providers.Factory(
@@ -76,7 +91,8 @@ class Container(containers.DeclarativeContainer):
 
     client_repository: providers.Factory[IClientRepository] = providers.Factory(
         ClientRepository,
-        db=db
+        db=db,
+        cache=client_cache
     )
 
     invoice_repository: providers.Factory[IInvoiceRepository] = providers.Factory(
