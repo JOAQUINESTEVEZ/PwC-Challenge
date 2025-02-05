@@ -1,4 +1,5 @@
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 
 def setup_logger():
@@ -6,9 +7,15 @@ def setup_logger():
     logger = logging.getLogger("app_logger")
     logger.setLevel(logging.INFO)
 
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.join('app', 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Create handlers with path joining
+    log_file = os.path.join(log_dir, 'app.log')
     # Create handlers
     file_handler = RotatingFileHandler(
-        'app/logs/app.log',
+        log_file,
         maxBytes=10*1024*1024,  # 10MB
         backupCount=5
     )
